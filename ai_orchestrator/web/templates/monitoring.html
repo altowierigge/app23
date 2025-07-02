@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Monitoring - AI Orchestration System{% endblock %}
+{% block page_title %}System Monitoring{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- System Health -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex align-items-center">
+                <i class="fas fa-heartbeat text-danger me-2"></i>
+                <h5 class="mb-0">System Health</h5>
+            </div>
+            <div class="card-body" id="health-status">
+                <div class="d-flex justify-content-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Performance Metrics -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex align-items-center">
+                <i class="fas fa-chart-line text-success me-2"></i>
+                <h5 class="mb-0">Performance Metrics</h5>
+            </div>
+            <div class="card-body" id="metrics-display">
+                <div class="d-flex justify-content-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <!-- API Response Times Chart -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-center">
+                <i class="fas fa-clock text-info me-2"></i>
+                <h5 class="mb-0">API Response Times</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="responseTimeChart" width="400" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let responseTimeChart;
+
+async function loadHealthStatus() {
+    try {
+        const response = await fetch('/api/health');
+        const health = await response.json();
+        
+        const container = document.getElementById('health-status');
+        let html = `
+            <div class="row text-center">
+                <div class="col-12 mb-3">
+                    <h4 class="text-${health.overall_status === 'healthy' ? 'success' : 'danger'}">
+                        <i class="fas fa-${health.overall_status === 'healthy' ? 'check-circle' : 'exclamation-triangle'}"></i>
+                        ${health.overall_status.toUpperCase()}
+                    </h4>
+                </div>
+            </div>
+        `;
+        
+        if (health.checks) {
+            if (health.checks.api_keys) {
+                html += `
+                    <div class="row">
+                        <div class="col-12">
+                            <h6>API Services</h6>
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <i class="fab fa-openai fa-2x text-${health.checks.api_keys.openai ? 'success' : 'muted'}"></i>
+                                    <div class="mt-1">
+                                        <small>OpenAI</small><br>
+                                        <span class="badge ${health.checks.api_keys.openai ? 'bg-success' : 'bg-secondary'}">
+                                            ${health.checks.api_keys.openai ? 'Connected' : 'Disconnected'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <i class="fas fa-brain fa-2x text-${health.checks.api_keys.anthropic ? 'success' : 'muted'}"></i>
+                                    <div class="mt-1">
+                                        <small>Anthropic</small><br>
+                                        <span class="badge ${health.checks.api_keys.anthropic ? 'bg-success' : 'bg-secondary'}">
+                                            ${health.checks.api_keys.anthropic ? 'Connected' : 'Disconnected'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <i class="fab fa-google fa-2x text-${health.checks.api_keys.google ? 'success' : 'muted'}"></i>
+                                    <div class="mt-1">
+                                        <small>Google</small><br>
+                                        <span class="badge ${health.checks.api_keys.google ? 'bg-success' : 'bg-secondary'}">
+                                            ${health.checks.api_keys.google ? 'Connected' : 'Disconnected'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        if (health.errors && health.errors.length > 0) {
+            html += `
+                <div class="mt-3">
+                    <h6 class="text-danger">Errors</h6>
+                    <ul class="list-unstyled">
+                        ${health.errors.map(error => `<li class="text-danger"><i class="fas fa-times me-1"></i>${error}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        if (health.warnings && health.warnings.length > 0) {
+            html += `
+                <div class="mt-3">
+                    <h6 class="text-warning">Warnings</h6>
+                    <ul class="list-unstyled">
+                        ${health.warnings.map(warning => `<li class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>${warning}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+    } catch (error) {
+        document.getElementById('health-status').innerHTML = 
+            '<div class="text-center text-danger">Failed to load health status</div>';
+    }
+}
+
+async function loadMetrics() {
+    try {
+        const response = await fetch('/api/metrics');
+        const data = await response.json();
+        
+        const container = document.getElementById('metrics-display');
+        
+        if (data.metrics) {
+            const metrics = data.metrics;
+            let html = `
+                <div class="row">
+                    <div class="col-6">
+                        <div class="text-center">
+                            <h3 class="text-primary mb-0">${metrics.total_requests || 0}</h3>
+                            <small class="text-muted">Total Requests</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center">
+                            <h3 class="text-success mb-0">${metrics.successful_requests || 0}</h3>
+                            <small class="text-muted">Successful</small>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-6">
+                        <div class="text-center">
+                            <h4 class="text-info mb-0">${(metrics.avg_response_time || 0).toFixed(2)}ms</h4>
+                            <small class="text-muted">Avg Response Time</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center">
+                            <h4 class="text-warning mb-0">${metrics.error_rate || 0}%</h4>
+                            <small class="text-muted">Error Rate</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+            
+            // Update chart if data available
+            if (metrics.response_times && responseTimeChart) {
+                updateResponseTimeChart(metrics.response_times);
+            }
+        } else {
+            container.innerHTML = '<div class="text-center text-muted">No metrics available</div>';
+        }
+    } catch (error) {
+        document.getElementById('metrics-display').innerHTML = 
+            '<div class="text-center text-danger">Failed to load metrics</div>';
+    }
+}
+
+function initializeResponseTimeChart() {
+    const ctx = document.getElementById('responseTimeChart').getContext('2d');
+    responseTimeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Response Time (ms)',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Response Time (ms)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateResponseTimeChart(responseTimes) {
+    if (!responseTimeChart || !responseTimes) return;
+    
+    const now = new Date();
+    const labels = responseTimes.map((_, index) => {
+        const time = new Date(now.getTime() - (responseTimes.length - index - 1) * 30000);
+        return time.toLocaleTimeString();
+    });
+    
+    responseTimeChart.data.labels = labels;
+    responseTimeChart.data.datasets[0].data = responseTimes;
+    responseTimeChart.update();
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadHealthStatus();
+    loadMetrics();
+    initializeResponseTimeChart();
+});
+
+// Auto-refresh every 30 seconds
+setInterval(() => {
+    loadHealthStatus();
+    loadMetrics();
+}, 30000);
+</script>
+{% endblock %}

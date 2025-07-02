@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - AI Orchestration System{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <!-- Quick Stats -->
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-project-diagram fa-2x text-primary mb-2"></i>
+                <h4 class="card-title mb-1" id="active-projects">-</h4>
+                <p class="card-text text-muted">Active Projects</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                <h4 class="card-title mb-1" id="completed-projects">-</h4>
+                <p class="card-text text-muted">Completed Today</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-clock fa-2x text-warning mb-2"></i>
+                <h4 class="card-title mb-1" id="avg-duration">-</h4>
+                <p class="card-text text-muted">Avg Duration</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <i class="fas fa-robot fa-2x text-info mb-2"></i>
+                <h4 class="card-title mb-1" id="api-calls">-</h4>
+                <p class="card-text text-muted">API Calls</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Quick Start -->
+    <div class="col-md-8 mb-3">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-plus-circle me-2"></i>
+                    Create New Project
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="new-project-form">
+                    <div class="mb-3">
+                        <label for="project-description" class="form-label">Project Description</label>
+                        <textarea class="form-control" id="project-description" rows="3" 
+                                placeholder="Describe what you want to build (e.g., 'Create a todo application with user authentication and CRUD operations')"></textarea>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enable-git" checked>
+                                <label class="form-check-label" for="enable-git">
+                                    Initialize Git repository
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enable-github">
+                                <label class="form-check-label" for="enable-github">
+                                    Push to GitHub
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-rocket me-2"></i>
+                        Start AI Orchestration
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- System Status -->
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-heartbeat me-2"></i>
+                    System Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Overall Health</span>
+                        <span id="system-health" class="badge bg-secondary">Checking...</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span>API Keys</span>
+                        <span id="api-keys-status" class="badge bg-secondary">-</span>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div id="api-keys-progress" class="progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span>Dependencies</span>
+                        <span id="deps-status" class="badge bg-secondary">-</span>
+                    </div>
+                </div>
+                
+                <button class="btn btn-outline-primary btn-sm w-100" onclick="refreshSystemStatus()">
+                    <i class="fas fa-sync-alt me-1"></i>
+                    Refresh Status
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Projects -->
+    <div class="col-md-8 mb-3">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history me-2"></i>
+                    Recent Projects
+                </h5>
+                <a href="/projects" class="btn btn-outline-primary btn-sm">View All</a>
+            </div>
+            <div class="card-body">
+                <div id="recent-projects">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-spinner fa-spin me-2"></i>
+                        Loading recent projects...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Performance Metrics -->
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-pie me-2"></i>
+                    Performance
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="performance-chart" width="100" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let performanceChart;
+
+// Initialize performance chart
+function initPerformanceChart() {
+    const ctx = document.getElementById('performance-chart').getContext('2d');
+    performanceChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Successful', 'Failed', 'In Progress'],
+            datasets: [{
+                data: [0, 0, 0],
+                backgroundColor: ['#28a745', '#dc3545', '#007bff'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 15
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Load dashboard data
+async function loadDashboardData() {
+    try {
+        // Load projects
+        const projectsResponse = await fetch('/api/projects');
+        const projectsData = await projectsResponse.json();
+        
+        // Update stats
+        const activeProjects = projectsData.projects.filter(p => 
+            !['completed', 'failed'].includes(p.current_phase)
+        ).length;
+        
+        document.getElementById('active-projects').textContent = activeProjects;
+        
+        // Load metrics
+        const metricsResponse = await fetch('/api/metrics');
+        const metricsData = await metricsResponse.json();
+        
+        if (metricsData.metrics) {
+            updateMetricsDisplay(metricsData.metrics);
+        }
+        
+        // Update recent projects
+        updateRecentProjects(projectsData.projects.slice(0, 5));
+        
+    } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+        showAlert('Failed to load dashboard data', 'warning');
+    }
+}
+
+// Update metrics display
+function updateMetricsDisplay(metrics) {
+    // Update API calls
+    const apiCalls = metrics.aggregated_metrics?.api_calls_total?.total || 0;
+    document.getElementById('api-calls').textContent = apiCalls.toFixed(0);
+    
+    // Update average duration
+    const avgDuration = metrics.aggregated_metrics?.workflow_total_execution_time?.average || 0;
+    document.getElementById('avg-duration').textContent = formatDuration(avgDuration);
+    
+    // Update performance chart
+    const successful = metrics.aggregated_metrics?.workflow_completed?.total || 0;
+    const failed = metrics.aggregated_metrics?.workflow_phase_errors?.total || 0;
+    const inProgress = (metrics.aggregated_metrics?.workflow_started?.total || 0) - successful - failed;
+    
+    performanceChart.data.datasets[0].data = [successful, failed, Math.max(0, inProgress)];
+    performanceChart.update();
+}
+
+// Update recent projects display
+function updateRecentProjects(projects) {
+    const container = document.getElementById('recent-projects');
+    
+    if (projects.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="fas fa-folder-open me-2"></i>
+                No recent projects found
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = projects.map(project => `
+        <div class="d-flex justify-content-between align-items-center mb-3 p-3 border rounded">
+            <div class="flex-grow-1">
+                <h6 class="mb-1">${project.user_request}</h6>
+                <small class="text-muted">
+                    <i class="fas fa-clock me-1"></i>
+                    ${new Date(project.created_at * 1000).toLocaleString()}
+                </small>
+            </div>
+            <div class="text-end">
+                <span class="badge ${getStatusBadge(project.current_phase)} mb-1">
+                    ${project.current_phase.replace('_', ' ')}
+                </span>
+                <div class="progress" style="width: 80px; height: 6px;">
+                    <div class="progress-bar" style="width: ${project.progress}%"></div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Refresh system status
+async function refreshSystemStatus() {
+    try {
+        const response = await fetch('/api/health');
+        const health = await response.json();
+        
+        // Update overall health
+        const healthBadge = document.getElementById('system-health');
+        healthBadge.className = `badge ${getStatusBadge(health.overall_status)}`;
+        healthBadge.textContent = health.overall_status.charAt(0).toUpperCase() + health.overall_status.slice(1);
+        
+        // Update API keys status
+        if (health.checks.api_keys) {
+            const validKeys = Object.values(health.checks.api_keys).filter(Boolean).length;
+            const totalKeys = Object.keys(health.checks.api_keys).length;
+            const percentage = totalKeys > 0 ? (validKeys / totalKeys) * 100 : 0;
+            
+            document.getElementById('api-keys-status').textContent = `${validKeys}/${totalKeys}`;
+            document.getElementById('api-keys-progress').style.width = `${percentage}%`;
+            document.getElementById('api-keys-progress').className = `progress-bar ${percentage === 100 ? 'bg-success' : 'bg-warning'}`;
+        }
+        
+        // Update dependencies status
+        if (health.checks.dependencies) {
+            const status = health.checks.dependencies.all_available ? 'Available' : 'Missing';
+            const badgeClass = health.checks.dependencies.all_available ? 'bg-success' : 'bg-warning';
+            document.getElementById('deps-status').className = `badge ${badgeClass}`;
+            document.getElementById('deps-status').textContent = status;
+        }
+        
+    } catch (error) {
+        console.error('Failed to refresh system status:', error);
+        showAlert('Failed to refresh system status', 'warning');
+    }
+}
+
+// Handle new project form submission
+document.getElementById('new-project-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const description = document.getElementById('project-description').value.trim();
+    if (!description) {
+        showAlert('Please enter a project description', 'warning');
+        return;
+    }
+    
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    const originalText = submitButton.innerHTML;
+    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating...';
+    submitButton.disabled = true;
+    
+    try {
+        const response = await fetch('/api/projects', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                description: description,
+                enable_git: document.getElementById('enable-git').checked,
+                enable_github: document.getElementById('enable-github').checked
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showAlert(`Project started successfully! Session ID: ${result.session_id}`, 'success');
+            document.getElementById('project-description').value = '';
+            
+            // Redirect to projects page after a short delay
+            setTimeout(() => {
+                window.location.href = '/projects';
+            }, 2000);
+        } else {
+            showAlert(`Failed to create project: ${result.detail}`, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Failed to create project:', error);
+        showAlert('Failed to create project. Please try again.', 'danger');
+    } finally {
+        submitButton.innerHTML = originalText;
+        submitButton.disabled = false;
+    }
+});
+
+// Initialize dashboard
+document.addEventListener('DOMContentLoaded', () => {
+    initPerformanceChart();
+    loadDashboardData();
+    refreshSystemStatus();
+    
+    // Refresh data every 30 seconds
+    setInterval(loadDashboardData, 30000);
+});
+</script>
+{% endblock %}

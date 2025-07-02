@@ -1,0 +1,441 @@
+# Feature-Based AI Development Workflow
+# Addresses issues with incomplete/incorrect app generation
+
+name: "Feature-Based Development Workflow"
+version: "3.0.0"
+description: "Structured workflow that implements applications feature-by-feature with proper validation"
+
+# Global workflow settings
+settings:
+  max_execution_time: 7200  # 2 hours for complete app
+  enable_parallel_execution: false
+  retry_failed_phases: true
+  max_retries_per_phase: 2
+  enable_checkpoints: true
+  
+# Agent configurations
+agents:
+  gpt:
+    role: "project_manager_consultant"
+    primary_tasks: ["requirements_refinement", "brainstorming", "consultation", "review", "testing"]
+    
+  claude:
+    role: "fullstack_developer" 
+    primary_tasks: ["brainstorming", "technical_planning", "implementation"]
+
+# Workflow phases definition
+phases:
+  
+  # Phase 1: Requirements Refinement
+  - name: "requirements_refinement"
+    description: "GPT analyzes and refines user requirements into specific features"
+    agent: "gpt"
+    task_type: "requirements_refinement"
+    parallel: false
+    required: true
+    timeout: 300
+    
+    inputs:
+      - name: "user_request"
+        source: "user_input"
+        required: true
+        
+    outputs:
+      - name: "refined_requirements"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 200
+      required_elements: ["core_features", "user_stories", "technical_requirements", "success_criteria"]
+
+  # Phase 2: Feature Breakdown
+  - name: "feature_breakdown"
+    description: "GPT breaks down requirements into specific implementable features"
+    agent: "gpt"
+    task_type: "technical_planning"
+    parallel: false
+    required: true
+    timeout: 300
+    depends_on: ["requirements_refinement"]
+    
+    inputs:
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "feature_list"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 300
+      required_elements: ["authentication_features", "core_business_features", "ui_features", "api_features"]
+
+  # Phase 3: Technical Architecture
+  - name: "technical_architecture"
+    description: "Claude designs complete technical architecture and file structure"
+    agent: "claude"
+    task_type: "technical_planning"
+    parallel: false
+    required: true
+    timeout: 600
+    depends_on: ["feature_breakdown"]
+    
+    inputs:
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+      - name: "feature_list"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "technical_architecture"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 1000
+      required_elements: ["backend_tech_stack", "frontend_tech_stack", "database_design", "file_structure", "api_design"]
+
+  # Phase 4: Project Foundation
+  - name: "project_foundation"
+    description: "Claude creates basic project structure, configs, and dependencies"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 600
+    depends_on: ["technical_architecture"]
+    
+    inputs:
+      - name: "technical_architecture"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "project_foundation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 2000
+      required_files: ["package.json", "requirements.txt", "docker-compose.yml", "main.py", "index.html"]
+      code_quality_check: true
+
+  # Phase 5: Database Implementation
+  - name: "database_implementation"
+    description: "Claude implements complete database models and schemas"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 600
+    depends_on: ["project_foundation"]
+    
+    inputs:
+      - name: "technical_architecture"
+        source: "workflow_state"
+        required: true
+      - name: "feature_list"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "database_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 1500
+      required_elements: ["user_model", "main_business_models", "relationships", "migrations"]
+      code_quality_check: true
+
+  # Phase 6: Authentication System
+  - name: "authentication_implementation"
+    description: "Claude implements complete user authentication system"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 900
+    depends_on: ["database_implementation"]
+    
+    inputs:
+      - name: "technical_architecture"
+        source: "workflow_state"
+        required: true
+      - name: "database_implementation"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "auth_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 2500
+      required_features: ["user_registration", "user_login", "jwt_tokens", "password_hashing", "auth_middleware"]
+      required_endpoints: ["/auth/register", "/auth/login", "/auth/logout"]
+      code_quality_check: true
+
+  # Phase 7: Core Business Logic
+  - name: "business_logic_implementation"
+    description: "Claude implements main business features and CRUD operations"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 1200
+    depends_on: ["authentication_implementation"]
+    
+    inputs:
+      - name: "technical_architecture"
+        source: "workflow_state"
+        required: true
+      - name: "feature_list"
+        source: "workflow_state"
+        required: true
+      - name: "database_implementation"
+        source: "workflow_state"
+        required: true
+      - name: "auth_implementation"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "business_logic_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 3000
+      required_operations: ["create", "read", "update", "delete"]
+      required_features: ["data_validation", "error_handling", "business_rules"]
+      code_quality_check: true
+
+  # Phase 8: API Layer
+  - name: "api_implementation"
+    description: "Claude implements complete REST API with all endpoints"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 900
+    depends_on: ["business_logic_implementation"]
+    
+    inputs:
+      - name: "technical_architecture"
+        source: "workflow_state"
+        required: true
+      - name: "business_logic_implementation"
+        source: "workflow_state"
+        required: true
+      - name: "auth_implementation"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "api_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 2000
+      required_endpoints: ["/health", "/api/v1/*"]
+      required_features: ["cors_setup", "error_middleware", "request_validation", "swagger_docs"]
+      code_quality_check: true
+
+  # Phase 9: Frontend Foundation
+  - name: "frontend_foundation"
+    description: "Claude creates React app structure with routing and state management"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 900
+    depends_on: ["api_implementation"]
+    
+    inputs:
+      - name: "technical_architecture"
+        source: "workflow_state"
+        required: true
+      - name: "api_implementation"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "frontend_foundation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 2500
+      required_files: ["src/App.js", "src/index.js", "public/index.html"]
+      required_features: ["routing_setup", "state_management", "api_client", "auth_context"]
+      code_quality_check: true
+
+  # Phase 10: Authentication UI
+  - name: "auth_ui_implementation"
+    description: "Claude implements login, register, and auth-related UI components"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 900
+    depends_on: ["frontend_foundation"]
+    
+    inputs:
+      - name: "frontend_foundation"
+        source: "workflow_state"
+        required: true
+      - name: "auth_implementation"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "auth_ui_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 2000
+      required_components: ["LoginForm", "RegisterForm", "ProtectedRoute", "AuthProvider"]
+      required_features: ["form_validation", "error_handling", "loading_states"]
+      code_quality_check: true
+
+  # Phase 11: Main Application UI
+  - name: "main_ui_implementation"
+    description: "Claude implements main application interface and business feature UI"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 1200
+    depends_on: ["auth_ui_implementation"]
+    
+    inputs:
+      - name: "frontend_foundation"
+        source: "workflow_state"
+        required: true
+      - name: "business_logic_implementation"
+        source: "workflow_state"
+        required: true
+      - name: "feature_list"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "main_ui_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 3000
+      required_features: ["crud_interfaces", "data_display", "responsive_design", "modern_ui"]
+      required_components: ["Dashboard", "DataTable", "Forms", "Navigation"]
+      code_quality_check: true
+
+  # Phase 12: Integration & Polish
+  - name: "integration_implementation"
+    description: "Claude integrates all components and adds polish features"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 900
+    depends_on: ["main_ui_implementation"]
+    
+    inputs:
+      - name: "project_foundation"
+        source: "workflow_state"
+        required: true
+      - name: "api_implementation"
+        source: "workflow_state"
+        required: true
+      - name: "main_ui_implementation"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "final_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 2000
+      required_features: ["error_pages", "loading_indicators", "notifications", "deployment_configs"]
+      integration_test: true
+      code_quality_check: true
+
+  # Phase 13: Code Review (Re-enabled with proper validation)
+  - name: "comprehensive_code_review"
+    description: "GPT performs thorough code review focusing on completeness and quality"
+    agent: "gpt"
+    task_type: "consultation"
+    parallel: false
+    required: true
+    timeout: 600
+    depends_on: ["integration_implementation"]
+    
+    inputs:
+      - name: "final_implementation"
+        source: "workflow_state"
+        required: true
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+      - name: "feature_list"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "code_review_results"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 1000
+      required_sections: ["completeness_check", "quality_assessment", "missing_features", "improvement_recommendations"]
+
+  # Phase 14: Final Improvements
+  - name: "final_improvements"
+    description: "Claude implements final improvements based on code review"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: false  # Optional based on review results
+    timeout: 600
+    depends_on: ["comprehensive_code_review"]
+    
+    inputs:
+      - name: "final_implementation"
+        source: "workflow_state"
+        required: true
+      - name: "code_review_results"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "polished_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 1000
+      code_quality_check: true
+
+  # Phase 15: Documentation Generation
+  - name: "documentation_generation"
+    description: "GPT generates comprehensive project documentation"
+    agent: "gpt"
+    task_type: "consultation"
+    parallel: false
+    required: true
+    timeout: 300
+    depends_on: ["final_improvements"]
+    
+    inputs:
+      - name: "polished_implementation"
+        source: "workflow_state"
+        required: true
+      - name: "technical_architecture"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "project_documentation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 500
+      required_sections: ["setup_instructions", "api_documentation", "user_guide", "deployment_guide"] 

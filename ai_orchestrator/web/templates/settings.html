@@ -1,0 +1,689 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - AI Orchestration System{% endblock %}
+{% block page_title %}System Settings{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- API Keys Configuration -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex align-items-center">
+                <i class="fas fa-key text-primary me-2"></i>
+                <h5 class="mb-0">API Keys Configuration</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-4">
+                    Configure your AI service API keys. Keys are stored securely and never displayed after saving.
+                </p>
+                
+                <form id="api-keys-form">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="openai-key" class="form-label">
+                                <i class="fab fa-openai me-1"></i>
+                                OpenAI API Key
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="openai-key" 
+                                       placeholder="sk-..." 
+                                       data-key-type="openai">
+                                <button class="btn btn-outline-secondary" type="button" 
+                                        onclick="togglePassword('openai-key')">
+                                    <i class="fas fa-eye" id="openai-key-icon"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                <span id="openai-status" class="badge bg-secondary">Not configured</span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="anthropic-key" class="form-label">
+                                <i class="fas fa-brain me-1"></i>
+                                Anthropic API Key
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="anthropic-key" 
+                                       placeholder="sk-ant-..." 
+                                       data-key-type="anthropic">
+                                <button class="btn btn-outline-secondary" type="button" 
+                                        onclick="togglePassword('anthropic-key')">
+                                    <i class="fas fa-eye" id="anthropic-key-icon"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                <span id="anthropic-status" class="badge bg-secondary">Not configured</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="google-key" class="form-label">
+                                <i class="fab fa-google me-1"></i>
+                                Google AI API Key
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="google-key" 
+                                       placeholder="AIza..." 
+                                       data-key-type="google">
+                                <button class="btn btn-outline-secondary" type="button" 
+                                        onclick="togglePassword('google-key')">
+                                    <i class="fas fa-eye" id="google-key-icon"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                <span id="google-status" class="badge bg-secondary">Not configured</span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary" id="save-keys-btn">
+                                <i class="fas fa-save me-1"></i>
+                                Save API Keys
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="validateKeys()">
+                                <i class="fas fa-check-circle me-1"></i>
+                                Test Keys
+                            </button>
+                            <button type="button" class="btn btn-outline-info ms-2" onclick="testConnection()">
+                                <i class="fas fa-wifi me-1"></i>
+                                Test Connection
+                            </button>
+                            <button type="button" class="btn btn-outline-warning ms-2" onclick="testApiKeySaving()">
+                                <i class="fas fa-bug me-1"></i>
+                                Debug API
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Security Note:</strong> API keys are encrypted and stored securely. They are never transmitted in plain text or displayed after saving.
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- System Configuration -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header d-flex align-items-center">
+                <i class="fas fa-cogs text-success me-2"></i>
+                <h5 class="mb-0">System Configuration</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Environment</label>
+                    <div class="form-control-plaintext">
+                        <span class="badge bg-info">{{ config.environment }}</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Debug Mode</label>
+                    <div class="form-control-plaintext">
+                        <span class="badge {{ 'bg-warning' if config.debug else 'bg-secondary' }}">
+                            {{ 'Enabled' if config.debug else 'Disabled' }}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Log Level</label>
+                    <div class="form-control-plaintext">
+                        <span class="badge bg-primary">{{ config.log_level.value }}</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Max Concurrent Agents</label>
+                    <div class="form-control-plaintext">{{ config.max_concurrent_agents }}</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Voting Enabled</label>
+                    <div class="form-control-plaintext">
+                        <span class="badge {{ 'bg-success' if config.enable_voting else 'bg-secondary' }}">
+                            {{ 'Yes' if config.enable_voting else 'No' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- API Health Status -->
+        <div class="card mt-3">
+            <div class="card-header d-flex align-items-center">
+                <i class="fas fa-heartbeat text-danger me-2"></i>
+                <h5 class="mb-0">API Health Status</h5>
+            </div>
+            <div class="card-body">
+                <div id="api-health-status">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- GitHub Integration Row -->
+<div class="row mt-4">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-center">
+                <i class="fab fa-github text-dark me-2"></i>
+                <h5 class="mb-0">GitHub Integration</h5>
+                <span class="badge bg-warning ms-2">Beta</span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <p class="text-muted mb-4">
+                            Connect your GitHub account to enable automatic repository creation, code commits, and pull request workflows for generated projects.
+                        </p>
+                        
+                        <form id="github-form">
+                            <div class="mb-3">
+                                <label for="github-token" class="form-label">
+                                    <i class="fas fa-key me-1"></i>
+                                    GitHub Personal Access Token
+                                </label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="github-token" 
+                                           placeholder="ghp_..." 
+                                           data-key-type="github">
+                                    <button class="btn btn-outline-secondary" type="button" 
+                                            onclick="togglePassword('github-token')">
+                                        <i class="fas fa-eye" id="github-token-icon"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    <span id="github-status" class="badge bg-secondary">Not connected</span>
+                                    <a href="https://github.com/settings/tokens/new?scopes=repo,workflow" 
+                                       target="_blank" class="ms-2 text-decoration-none">
+                                        <i class="fas fa-external-link-alt"></i> Create new token
+                                    </a>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="auto-create-repo" checked>
+                                        <label class="form-check-label" for="auto-create-repo">
+                                            Automatically create repository for each project
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="auto-commit" checked>
+                                        <label class="form-check-label" for="auto-commit">
+                                            Auto-commit changes during development
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="create-pr" checked>
+                                        <label class="form-check-label" for="create-pr">
+                                            Create pull requests for code review
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="private-repos" checked>
+                                        <label class="form-check-label" for="private-repos">
+                                            Create private repositories
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <button type="submit" class="btn btn-dark" id="save-github-btn">
+                                    <i class="fab fa-github me-1"></i>
+                                    Connect GitHub
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" 
+                                        onclick="testGitHubConnection()" id="test-github-btn">
+                                    <i class="fas fa-check-circle me-1"></i>
+                                    Test Connection
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">Required Permissions</h6>
+                                <ul class="list-unstyled mb-0">
+                                    <li><i class="fas fa-check text-success me-2"></i>repo (Full repository access)</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>workflow (GitHub Actions)</li>
+                                </ul>
+                                <hr>
+                                <div id="github-user-info" class="d-none">
+                                    <h6 class="card-title">Connected Account</h6>
+                                    <div class="d-flex align-items-center">
+                                        <img id="github-avatar" src="" alt="GitHub Avatar" 
+                                             class="rounded-circle me-2" width="32" height="32">
+                                        <div>
+                                            <div id="github-username" class="fw-bold"></div>
+                                            <div id="github-email" class="text-muted small"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Password visibility toggle
+function togglePassword(fieldId) {
+    const field = document.getElementById(fieldId);
+    const icon = document.getElementById(fieldId + '-icon');
+    
+    if (field.type === 'password') {
+        field.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+    } else {
+        field.type = 'password';
+        icon.className = 'fas fa-eye';
+    }
+}
+
+// Load initial API health status
+async function loadApiHealthStatus() {
+    try {
+        const response = await fetch('/api/health');
+        const health = await response.json();
+        
+        const statusContainer = document.getElementById('api-health-status');
+        let healthHtml = '';
+        
+        if (health.checks && health.checks.api_keys) {
+            const apiKeys = health.checks.api_keys;
+            
+            healthHtml += `
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="p-2">
+                            <i class="fab fa-openai fa-2x text-${apiKeys.openai ? 'success' : 'muted'}"></i>
+                            <div class="mt-1">
+                                <small class="text-muted">OpenAI</small>
+                                <br>
+                                <span class="badge ${apiKeys.openai ? 'bg-success' : 'bg-secondary'}">
+                                    ${apiKeys.openai ? 'Active' : 'Inactive'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2">
+                            <i class="fas fa-brain fa-2x text-${apiKeys.anthropic ? 'success' : 'muted'}"></i>
+                            <div class="mt-1">
+                                <small class="text-muted">Anthropic</small>
+                                <br>
+                                <span class="badge ${apiKeys.anthropic ? 'bg-success' : 'bg-secondary'}">
+                                    ${apiKeys.anthropic ? 'Active' : 'Inactive'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2">
+                            <i class="fab fa-google fa-2x text-${apiKeys.google ? 'success' : 'muted'}"></i>
+                            <div class="mt-1">
+                                <small class="text-muted">Google</small>
+                                <br>
+                                <span class="badge ${apiKeys.google ? 'bg-success' : 'bg-secondary'}">
+                                    ${apiKeys.google ? 'Active' : 'Inactive'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Update individual status badges
+            document.getElementById('openai-status').className = `badge ${apiKeys.openai ? 'bg-success' : 'bg-secondary'}`;
+            document.getElementById('openai-status').textContent = apiKeys.openai ? 'Configured' : 'Not configured';
+            
+            document.getElementById('anthropic-status').className = `badge ${apiKeys.anthropic ? 'bg-success' : 'bg-secondary'}`;
+            document.getElementById('anthropic-status').textContent = apiKeys.anthropic ? 'Configured' : 'Not configured';
+            
+            document.getElementById('google-status').className = `badge ${apiKeys.google ? 'bg-success' : 'bg-secondary'}`;
+            document.getElementById('google-status').textContent = apiKeys.google ? 'Configured' : 'Not configured';
+        } else {
+            healthHtml = '<div class="text-center text-muted">Unable to load API status</div>';
+        }
+        
+        statusContainer.innerHTML = healthHtml;
+    } catch (error) {
+        document.getElementById('api-health-status').innerHTML = 
+            '<div class="text-center text-danger">Error loading API status</div>';
+    }
+}
+
+// Save API keys
+async function saveApiKeys(formData) {
+    const saveBtn = document.getElementById('save-keys-btn');
+    const originalText = saveBtn.innerHTML;
+    
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+    
+    try {
+        const response = await fetch('/api/settings/apikeys', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+        
+        const responseText = await response.text();
+        console.log('Raw response text:', responseText);
+        
+        let result;
+        try {
+            result = JSON.parse(responseText);
+            console.log('Parsed response data:', result);
+        } catch (parseError) {
+            console.error('JSON parsing failed:', parseError);
+            showAlert(`Server response parsing error: ${parseError.message}`, 'danger');
+            return;
+        }
+        
+        if (response.ok) {
+            showAlert('API keys saved successfully!', 'success');
+            
+            // Clear form fields for security
+            document.getElementById('openai-key').value = '';
+            document.getElementById('anthropic-key').value = '';
+            document.getElementById('google-key').value = '';
+            
+            // Refresh health status
+            setTimeout(() => {
+                loadApiHealthStatus();
+                checkHealth(); // Global function from base template
+            }, 1000);
+        } else {
+            showAlert(result.message || 'Failed to save API keys', 'danger');
+        }
+    } catch (error) {
+        console.error('API Key Save Error:', error);
+        showAlert(`Network error: ${error.message || 'Failed to save API keys'}`, 'danger');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalText;
+    }
+}
+
+// Validate API keys
+async function validateKeys() {
+    try {
+        const response = await fetch('/api/validate-keys', {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            const { valid_keys, total_keys } = result;
+            showAlert(`API Key Validation: ${valid_keys}/${total_keys} keys are valid`, 
+                     valid_keys === total_keys ? 'success' : 'warning');
+            
+            // Refresh health status
+            loadApiHealthStatus();
+        } else {
+            showAlert('Failed to validate API keys', 'danger');
+        }
+    } catch (error) {
+        showAlert('Network error: Failed to validate API keys', 'danger');
+    }
+}
+
+// Debug function to test connectivity
+async function testConnection() {
+    try {
+        console.log('Testing basic connectivity...');
+        const response = await fetch('/api/health');
+        console.log('Health check response:', response.status);
+        const health = await response.json();
+        console.log('Health data:', health);
+        showAlert('Connection test successful!', 'success');
+    } catch (error) {
+        console.error('Connection test failed:', error);
+        showAlert(`Connection test failed: ${error.message}`, 'danger');
+    }
+}
+
+// Manual test of API key saving
+async function testApiKeySaving() {
+    try {
+        console.log('Testing API key saving directly...');
+        
+        const testData = {
+            openai_key: 'sk-test123456789012345678901234567890123456789012345'
+        };
+        
+        console.log('Sending test data:', testData);
+        
+        const response = await fetch('/api/settings/apikeys', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(testData)
+        });
+        
+        console.log('API Key test response status:', response.status);
+        console.log('API Key test response headers:', Object.fromEntries(response.headers.entries()));
+        
+        const text = await response.text();
+        console.log('Raw response text:', text);
+        
+        let result;
+        try {
+            result = JSON.parse(text);
+            console.log('Parsed response:', result);
+        } catch (parseError) {
+            console.error('Failed to parse JSON:', parseError);
+            showAlert(`Response parsing error: ${parseError.message}`, 'danger');
+            return;
+        }
+        
+        if (response.ok) {
+            showAlert('Manual API key test successful!', 'success');
+        } else {
+            showAlert(`API key test failed: ${result.detail || result.message || 'Unknown error'}`, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('API key test failed:', error);
+        showAlert(`API key test error: ${error.message}`, 'danger');
+    }
+}
+
+// Handle form submission
+document.getElementById('api-keys-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    console.log('Form submission triggered');
+    
+    // Get form field values with detailed logging
+    const openaiValue = document.getElementById('openai-key').value;
+    const anthropicValue = document.getElementById('anthropic-key').value;
+    const googleValue = document.getElementById('google-key').value;
+    
+    console.log('Raw form values:');
+    console.log('- OpenAI:', `"${openaiValue}" (length: ${openaiValue.length})`);
+    console.log('- Anthropic:', `"${anthropicValue}" (length: ${anthropicValue.length})`);
+    console.log('- Google:', `"${googleValue}" (length: ${googleValue.length})`);
+    
+    // Only include non-empty keys in the request
+    const formData = {};
+    
+    if (openaiValue.trim()) {
+        formData.openai_key = openaiValue.trim();
+    }
+    if (anthropicValue.trim()) {
+        formData.anthropic_key = anthropicValue.trim();
+    }
+    if (googleValue.trim()) {
+        formData.google_key = googleValue.trim();
+    }
+    
+    console.log('Final form data (only non-empty keys):', formData);
+    
+    // Basic validation with detailed logging
+    const hasOpenAI = !!formData.openai_key;
+    const hasAnthropic = !!formData.anthropic_key;
+    const hasGoogle = !!formData.google_key;
+    
+    console.log('Validation check:');
+    console.log('- Has OpenAI key:', hasOpenAI);
+    console.log('- Has Anthropic key:', hasAnthropic);
+    console.log('- Has Google key:', hasGoogle);
+    
+    if (Object.keys(formData).length === 0) {
+        console.log('Validation failed: No API keys provided');
+        showAlert('Please enter at least one API key', 'warning');
+        return;
+    }
+    
+    console.log('Validation passed, calling saveApiKeys...');
+    saveApiKeys(formData);
+});
+
+// GitHub Integration Functions
+async function saveGitHubToken(formData) {
+    const saveBtn = document.getElementById('save-github-btn');
+    const originalText = saveBtn.innerHTML;
+    
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Connecting...';
+    
+    try {
+        const response = await fetch('/api/settings/github', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showAlert('GitHub connected successfully!', 'success');
+            
+            // Update UI with user info
+            if (result.user) {
+                document.getElementById('github-status').className = 'badge bg-success';
+                document.getElementById('github-status').textContent = 'Connected';
+                
+                document.getElementById('github-user-info').classList.remove('d-none');
+                document.getElementById('github-username').textContent = result.user.login;
+                document.getElementById('github-email').textContent = result.user.email || 'No public email';
+                document.getElementById('github-avatar').src = result.user.avatar_url;
+            }
+            
+            // Clear token field for security
+            document.getElementById('github-token').value = '';
+        } else {
+            showAlert(result.message || 'Failed to connect GitHub', 'danger');
+        }
+    } catch (error) {
+        console.error('GitHub Save Error:', error);
+        showAlert(`Error: ${error.message || 'Failed to connect GitHub'}`, 'danger');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalText;
+    }
+}
+
+async function testGitHubConnection() {
+    try {
+        const response = await fetch('/api/settings/github/test');
+        const result = await response.json();
+        
+        if (response.ok && result.connected) {
+            showAlert(`GitHub connection successful! Connected as: ${result.username}`, 'success');
+        } else {
+            showAlert(result.message || 'GitHub connection test failed', 'warning');
+        }
+    } catch (error) {
+        showAlert('Error testing GitHub connection', 'danger');
+    }
+}
+
+// Handle GitHub form submission
+document.getElementById('github-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const token = document.getElementById('github-token').value.trim();
+    
+    if (!token) {
+        showAlert('Please enter a GitHub personal access token', 'warning');
+        return;
+    }
+    
+    const formData = {
+        token: token,
+        auto_create_repo: document.getElementById('auto-create-repo').checked,
+        auto_commit: document.getElementById('auto-commit').checked,
+        create_pr: document.getElementById('create-pr').checked,
+        private_repos: document.getElementById('private-repos').checked
+    };
+    
+    saveGitHubToken(formData);
+});
+
+// Load GitHub status on page load
+async function loadGitHubStatus() {
+    try {
+        const response = await fetch('/api/settings/github/status');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.connected && result.user) {
+                document.getElementById('github-status').className = 'badge bg-success';
+                document.getElementById('github-status').textContent = 'Connected';
+                
+                document.getElementById('github-user-info').classList.remove('d-none');
+                document.getElementById('github-username').textContent = result.user.login;
+                document.getElementById('github-email').textContent = result.user.email || 'No public email';
+                document.getElementById('github-avatar').src = result.user.avatar_url;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading GitHub status:', error);
+    }
+}
+
+// Load initial status when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadApiHealthStatus();
+    loadGitHubStatus();
+});
+
+// Auto-refresh health status every 30 seconds
+setInterval(loadApiHealthStatus, 30000);
+</script>
+{% endblock %}

@@ -1,0 +1,27 @@
+{
+  "name": "ai-generated-project-ef795af8",
+  "description": "AI-powered social media platform with real-time features",
+  "session_id": "ef795af8-3cad-4b99-be0e-07842c6e7299",
+  "created_at": "2025-07-01T02:59:18.008572",
+  "file_count": 14,
+  "metadata": {
+    "workflow_state": {
+      "session_id": "ef795af8-3cad-4b99-be0e-07842c6e7299",
+      "refined_requirements": "AI-powered social media platform with real-time features",
+      "gpt_brainstorm": null,
+      "claude_brainstorm": null,
+      "final_strategy": null,
+      "claude_plan": null,
+      "backend_implementation": "\"workflow_engine\", \"function\": \"_execute_single_phase\", \"line\": 265}\n{\"timestamp\": \"2025-06-30T22:15:08.859626\", \"level\": \"INFO\", \"logger\": \"workflow_engine\", \"message\": \"Executing phase: frontend_implementation\", \"module\": \"workflow_engine\", \"function\": \"_execute_single_phase\", \"line\": 265}\n{\"timestamp\": \"2025-06-30T22:15:08.860628\", \"level\": \"INFO\", \"logger\": \"agent.backend_expert\", \"message\": \"Executing task: implementation (Session: 5a2f8ffa-74f4-4620-9df8-1f442801d299)\", \"module\": \"base_agent\", \"function\": \"execute_task\", \"line\": 166}\n{\"timestamp\": \"2025-06-30T22:15:08.861688\", \"level\": \"INFO\", \"logger\": \"agent.frontend_expert\", \"message\": \"Executing task: implementation (Session: 5a2f8ffa-74f4-4620-9df8-1f442801d299)\", \"module\": \"base_agent\", \"function\": \"execute_task\", \"line\": 166}\n{\"timestamp\": \"2025-06-30T22:15:18.848734\", \"level\": \"INFO\", \"logger\": \"httpx\", \"message\": \"HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyA7FDISEZnKPLpzLPwTk7W6aHtSwr-P7wg \\\"HTTP/1.1 200 OK\\\"\", \"module\": \"_client\", \"function\": \"_send_single_request\", \"line\": 1729}\n{\"timestamp\": \"2025-06-30T22:15:18.854740\", \"level\": \"INFO\", \"logger\": \"agent.frontend_expert\", \"message\": \"Task completed successfully: implementation (Duration: 9.99s)\", \"module\": \"base_agent\", \"function\": \"execute_task\", \"line\": 193}\n{\"timestamp\": \"2025-06-30T22:15:18.856743\", \"level\": \"INFO\", \"logger\": \"workflow_engine\", \"message\": \"Phase completed successfully: frontend_implementation\", \"module\": \"workflow_engine\", \"function\": \"_execute_single_phase\", \"line\": 296}\n{\"timestamp\": \"2025-06-30T22:15:21.606337\", \"level\": \"INFO\", \"logger\": \"api_validator\", \"message\": \"OpenAI API key configured\", \"module\": \"validation\", \"function\": \"validate_all_api_keys\", \"line\": 35}\n{\"timestamp\": \"2025-06-30T22:15:21.608359\", \"level\": \"INFO\", \"logger\": \"api_validator\", \"message\": \"Anthropic API key configured\", \"module\": \"validation\", \"function\": \"validate_all_api_key",
+      "frontend_implementation": "\"workflow_engine\", \"function\": \"_execute_single_phase\", \"line\": 265}\n{\"timestamp\": \"2025-06-30T22:15:08.860628\", \"level\": \"INFO\", \"logger\": \"agent.backend_expert\", \"message\": \"Executing task: implementation (Session: 5a2f8ffa-74f4-4620-9df8-1f442801d299)\", \"module\": \"base_agent\", \"function\": \"execute_task\", \"line\": 166}\n{\"timestamp\": \"2025-06-30T22:15:08.861688\", \"level\": \"INFO\", \"logger\": \"agent.frontend_expert\", \"message\": \"Executing task: implementation (Session: 5a2f8ffa-74f4-4620-9df8-1f442801d299)\", \"module\": \"base_agent\", \"function\": \"execute_task\", \"line\": 166}\n{\"timestamp\": \"2025-06-30T22:15:18.848734\", \"level\": \"INFO\", \"logger\": \"httpx\", \"message\": \"HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyA7FDISEZnKPLpzLPwTk7W6aHtSwr-P7wg \\\"HTTP/1.1 200 OK\\\"\", \"module\": \"_client\", \"function\": \"_send_single_request\", \"line\": 1729}\n{\"timestamp\": \"2025-06-30T22:15:18.854740\", \"level\": \"INFO\", \"logger\": \"agent.frontend_expert\", \"message\": \"Task completed successfully: implementation (Duration: 9.99s)\", \"module\": \"base_agent\", \"function\": \"execute_task\", \"line\": 193}\n{\"timestamp\": \"2025-06-30T22:15:18.856743\", \"level\": \"INFO\", \"logger\": \"workflow_engine\", \"message\": \"Phase completed successfully: frontend_implementation\", \"module\": \"workflow_engine\", \"function\": \"_execute_single_phase\", \"line\": 296}\n{\"timestamp\": \"2025-06-30T22:15:21.606337\", \"level\": \"INFO\", \"logger\": \"api_validator\", \"message\": \"OpenAI API key configured\", \"module\": \"validation\", \"function\": \"validate_all_api_keys\", \"line\": 35}\n{\"timestamp\": \"2025-06-30T22:15:21.608359\", \"level\": \"INFO\", \"logger\": \"api_validator\", \"message\": \"Anthropic API key configured\", \"module\": \"validation\", \"function\": \"validate_all_api_keys\", \"line\": 43}\n{\"timestamp\": \"2025-06-30T22:15:21.610344\", \"level\": \"INFO\", \"logger\": \"api_validator\", \"message\": \"Google API key configured\", \"module\": \"validation\", \"function\": \"validate_all_api_keys\", \"line\": 51}\n{\"times",
+      "improved_backend_implementation": null,
+      "improved_frontend_implementation": null,
+      "test_implementation": null,
+      "code_review_feedback": null,
+      "final_documentation": null,
+      "quality_report": null
+    },
+    "generation_time": "2025-07-01T02:59:18.008572",
+    "file_count": 14
+  }
+}

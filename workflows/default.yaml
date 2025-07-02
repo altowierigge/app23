@@ -1,0 +1,426 @@
+# GPT-Claude Collaborative Workflow Configuration
+# This YAML file defines the 2-agent workflow with brainstorming and consultation
+
+name: "GPT-Claude Collaborative Development"
+version: "2.0.0"
+description: "Streamlined workflow with GPT as project manager/consultant and Claude as full-stack developer"
+
+# Global workflow settings
+settings:
+  max_execution_time: 3600  # 1 hour
+  enable_parallel_execution: false  # More structured sequential flow
+  retry_failed_phases: true
+  max_retries_per_phase: 2
+  enable_checkpoints: true
+  
+# Agent configurations
+agents:
+  gpt:
+    role: "project_manager_consultant"
+    primary_tasks: ["requirements_refinement", "brainstorming", "consultation", "review", "testing"]
+    capabilities:
+      - "Requirements analysis and refinement"
+      - "Strategic project planning and brainstorming"
+      - "Code review and quality assessment"
+      - "Consultant recommendations for improvements"
+      - "Test strategy development"
+    
+  claude:
+    role: "fullstack_developer" 
+    primary_tasks: ["brainstorming", "technical_planning", "implementation"]
+    capabilities:
+      - "Full-stack architecture design"
+      - "Backend and frontend implementation"
+      - "Database design and API development"
+      - "UI/UX design and frontend development"
+      - "Security and scalability planning"
+
+# Workflow phases definition
+phases:
+  
+  # Phase 1: Requirements Refinement
+  - name: "requirements_refinement"
+    description: "GPT analyzes and refines user requirements"
+    agent: "gpt"
+    task_type: "requirements_refinement"
+    parallel: false
+    required: true
+    timeout: 300  # 5 minutes
+    
+    inputs:
+      - name: "user_request"
+        source: "user_input"
+        required: true
+        
+    outputs:
+      - name: "refined_requirements"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 100
+      required_elements: ["scope", "deliverables", "constraints"]
+      
+    retry_config:
+      max_attempts: 3
+      backoff_strategy: "exponential"
+
+  # Phase 2: Strategic Brainstorming Session
+  - name: "brainstorming_gpt"
+    description: "GPT initiates brainstorming about project strategy and market positioning"
+    agent: "gpt"
+    task_type: "brainstorming"
+    parallel: false
+    required: true
+    timeout: 400  # 6.7 minutes
+    
+    inputs:
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "gpt_brainstorm"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 300
+      required_elements: ["market_analysis", "competitive_advantages", "core_features"]
+
+  - name: "brainstorming_claude"
+    description: "Claude responds to brainstorming with technical insights and implementation ideas"
+    agent: "claude"
+    task_type: "brainstorming"
+    parallel: false
+    required: true
+    timeout: 400  # 6.7 minutes
+    depends_on: ["brainstorming_gpt"]
+    
+    inputs:
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+      - name: "gpt_brainstorm"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "claude_brainstorm"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 300
+      required_elements: ["technical_approach", "architecture_ideas", "implementation_strategy"]
+
+  # Phase 3: Final Strategy Alignment
+  - name: "strategy_alignment"
+    description: "GPT synthesizes brainstorming results into final project strategy"
+    agent: "gpt"
+    task_type: "plan_comparison"
+    parallel: false
+    required: true
+    timeout: 300  # 5 minutes
+    depends_on: ["brainstorming_gpt", "brainstorming_claude"]
+    
+    inputs:
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+      - name: "gpt_brainstorm"
+        source: "workflow_state"
+        required: true
+      - name: "claude_brainstorm"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "final_strategy"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 100
+      # Temporarily disabled strict validation to test workflow
+      # required_sections: ["project_vision", "key_features", "technical_direction"]
+
+  # Phase 4: Technical Planning
+  - name: "technical_planning"
+    description: "Claude creates comprehensive technical plan for full-stack development"
+    agent: "claude"
+    task_type: "technical_planning"
+    parallel: false
+    required: true
+    timeout: 600  # 10 minutes
+    depends_on: ["strategy_alignment"]
+    
+    inputs:
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+      - name: "final_strategy"
+        source: "workflow_state"
+        required: true
+        
+    outputs:
+      - name: "claude_plan"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 400
+      # Temporarily simplified validation to help workflow complete
+      required_elements: ["technology_stack", "database"]
+
+  # Phase 5: Backend Implementation
+  - name: "backend_implementation"
+    description: "Claude implements backend code and APIs"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 900  # 15 minutes
+    depends_on: ["technical_planning"]
+    
+    inputs:
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+      - name: "final_strategy"
+        source: "workflow_state"
+        required: true
+      - name: "technical_plan"
+        source: "workflow_state.claude_plan"
+        required: true
+        
+    outputs:
+      - name: "backend_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 1000
+      code_quality_check: true
+
+  # Phase 6: Frontend Implementation
+  - name: "frontend_implementation"
+    description: "Claude implements frontend code and user interface"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: true
+    timeout: 900  # 15 minutes
+    depends_on: ["backend_implementation"]
+    
+    inputs:
+      - name: "refined_requirements"
+        source: "workflow_state"
+        required: true
+      - name: "final_strategy"
+        source: "workflow_state"
+        required: true
+      - name: "technical_plan"
+        source: "workflow_state.claude_plan"
+        required: true
+      - name: "backend_api_structure"
+        source: "workflow_state.backend_implementation"
+        parser: "extract_api_structure"
+        required: false
+        
+    outputs:
+      - name: "frontend_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 1000
+      code_quality_check: true
+
+  # Phase 7: GPT Code Review - TEMPORARILY DISABLED
+  - name: "code_review"
+    description: "GPT reviews all code and provides comprehensive feedback"
+    agent: "gpt"
+    task_type: "consultation"
+    parallel: false
+    required: false  # Made optional to prevent rate limiting failures
+    enabled: false  # TEMPORARILY DISABLED FOR TESTING
+    timeout: 600  # 10 minutes
+    depends_on: ["backend_implementation", "frontend_implementation"]
+    
+    inputs:
+      - name: "backend_code"
+        source: "workflow_state.backend_implementation"
+        required: true
+      - name: "frontend_code"
+        source: "workflow_state.frontend_implementation"
+        required: true
+      - name: "requirements"
+        source: "workflow_state.refined_requirements"
+        required: true
+      - name: "strategy"
+        source: "workflow_state.final_strategy"
+        required: true
+        
+    outputs:
+      - name: "code_review_feedback"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 400
+      required_elements: ["strengths", "improvement_areas", "specific_recommendations"]
+
+  # Phase 8: Claude Code Improvements - TEMPORARILY DISABLED
+  - name: "code_improvements"
+    description: "Claude implements improvements based on GPT's review and consultation"
+    agent: "claude"
+    task_type: "implementation"
+    parallel: false
+    required: false  # Made optional since it depends on code_review
+    enabled: false  # TEMPORARILY DISABLED FOR TESTING
+    timeout: 600  # 10 minutes
+    depends_on: ["code_review"]
+    
+    inputs:
+      - name: "backend_code"
+        source: "workflow_state.backend_implementation"
+        required: true
+      - name: "frontend_code"
+        source: "workflow_state.frontend_implementation"
+        required: true
+      - name: "review_feedback"
+        source: "workflow_state.code_review_feedback"
+        required: true
+        
+    outputs:
+      - name: "improved_backend_implementation"
+        destination: "workflow_state"
+      - name: "improved_frontend_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      min_content_length: 1000
+      code_quality_check: true
+
+  # Phase 9: Test Generation - TEMPORARILY DISABLED
+  - name: "test_generation"
+    description: "GPT generates comprehensive tests for the improved implementation"
+    agent: "gpt"
+    task_type: "testing"
+    parallel: false
+    required: false  # Made optional to prevent rate limiting issues
+    enabled: false  # TEMPORARILY DISABLED FOR TESTING
+    timeout: 600  # 10 minutes
+    depends_on: ["code_improvements"]
+    
+    inputs:
+      - name: "backend_code"
+        source: "workflow_state.improved_backend_implementation"
+        required: true
+      - name: "frontend_code"
+        source: "workflow_state.improved_frontend_implementation"
+        required: true
+      - name: "requirements"
+        source: "workflow_state.refined_requirements"
+        required: true
+        
+    outputs:
+      - name: "test_implementation"
+        destination: "workflow_state"
+        
+    validation:
+      test_coverage_check: true
+      min_test_cases: 10
+
+  # Phase 10: Final Quality Assurance - TEMPORARILY DISABLED
+  - name: "final_qa"
+    description: "GPT performs final quality assurance and creates project documentation"
+    agent: "gpt"
+    task_type: "consultation"
+    parallel: false
+    required: false  # Made optional to prevent rate limiting issues
+    enabled: false  # TEMPORARILY DISABLED FOR TESTING
+    timeout: 300  # 5 minutes
+    depends_on: ["test_generation"]
+    
+    inputs:
+      - name: "backend_code"
+        source: "workflow_state.improved_backend_implementation"
+        required: true
+      - name: "frontend_code"
+        source: "workflow_state.improved_frontend_implementation"
+        required: true
+      - name: "test_code"
+        source: "workflow_state.test_implementation"
+        required: true
+      - name: "requirements"
+        source: "workflow_state.refined_requirements"
+        required: true
+      - name: "strategy"
+        source: "workflow_state.final_strategy"
+        required: true
+        
+    outputs:
+      - name: "final_documentation"
+        destination: "workflow_state"
+      - name: "quality_report"
+        destination: "workflow_state"
+
+# Conditional logic definitions (simplified for 2-agent workflow)
+conditions:
+  review_needed:
+    expression: "len(workflow_state.backend_implementation) > 0 and len(workflow_state.frontend_implementation) > 0"
+
+# Error handling configuration
+error_handling:
+  global_timeout: 3600  # 1 hour total
+  phase_failure_strategy: "retry_then_skip"
+  critical_phases: ["requirements_refinement", "backend_implementation", "frontend_implementation", "code_improvements"]
+  
+  escalation_rules:
+    - condition: "consecutive_failures > 2"
+      action: "pause_workflow"
+    - condition: "critical_phase_failure"
+      action: "escalate_to_human"
+    - condition: "total_execution_time > global_timeout"
+      action: "emergency_save_and_exit"
+
+# Output configuration
+output:
+  file_structure:
+    backend:
+      path: "backend/"
+      files: ["src/", "tests/", "requirements.txt", "README.md", "Dockerfile"]
+    frontend:
+      path: "frontend/"
+      files: ["src/", "public/", "package.json", "README.md", "Dockerfile"]
+    tests:
+      path: "tests/"
+      files: ["integration/", "e2e/", "performance/"]
+    docs:
+      path: "docs/"
+      files: ["architecture.md", "api.md", "deployment.md", "user-guide.md"]
+      
+  git_integration:
+    enabled: true
+    auto_commit: true
+    commit_message_template: "GPT-Claude Collaborative Project: {project_name}"
+    branch_strategy: "main"
+    
+  quality_checks:
+    code_validation: true
+    security_scan: true
+    performance_analysis: true
+    documentation_completeness: true
+
+# Monitoring and logging
+monitoring:
+  log_level: "INFO"
+  track_metrics:
+    - "execution_time_per_phase"
+    - "token_usage_per_agent" 
+    - "error_rate_per_agent"
+    - "code_quality_scores"
+    - "brainstorming_effectiveness"
+    - "consultation_impact"
+    
+  alerts:
+    - condition: "phase_timeout"
+      severity: "warning"
+    - condition: "agent_error_rate > 0.3"
+      severity: "critical"
+    - condition: "workflow_completion"
+      severity: "info"

@@ -1,0 +1,88 @@
+# Development Docker Compose configuration
+version: '3.8'
+
+services:
+  # AI Orchestration System - Development
+  ai-orchestrator-dev:
+    build: 
+      context: .
+      target: builder  # Use builder stage for development
+    ports:
+      - "8000:8000"
+      - "8001:8001"  # Debug port
+    environment:
+      # Development environment
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      
+      # API Keys (set these in .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      
+      # Configuration
+      - OUTPUT_DIR=/app/output
+      - WORKFLOW_CONFIG=/app/workflows/default.yaml
+      
+      # Git Integration
+      - GIT_ENABLED=true
+      - GIT_AUTO_COMMIT=false  # Disabled for development
+      - GIT_AUTO_PUSH=false
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      
+      # Development settings
+      - PYTHONPATH=/app
+      - WATCHDOG_ENABLED=true
+      
+    volumes:
+      # Mount source code for live reload
+      - .:/app
+      - /app/__pycache__  # Exclude pycache
+      - dev_output:/app/output
+      - dev_logs:/app/logs
+    
+    restart: "no"  # Don't restart in development
+    
+    depends_on:
+      - redis-dev
+    
+    # Override command for development with auto-reload
+    command: >
+      python -m uvicorn ai_orchestrator.web.app:create_app 
+      --factory 
+      --host 0.0.0.0 
+      --port 8000 
+      --reload 
+      --reload-dir /app/ai_orchestrator
+      --log-level debug
+
+  # Redis for development
+  redis-dev:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # Different port for dev
+    volumes:
+      - redis_dev_data:/data
+    restart: "no"
+    command: redis-server --appendonly yes --loglevel debug
+
+  # Development tools container
+  dev-tools:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONPATH=/app
+    command: tail -f /dev/null  # Keep container running
+    profiles:
+      - dev-tools
+
+volumes:
+  redis_dev_data:
+  dev_output:
+  dev_logs:
+
+networks:
+  default:
+    driver: bridge

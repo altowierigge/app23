@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Orchestration System{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .sidebar {
+            height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 4px 0;
+            transition: all 0.3s ease;
+        }
+        .sidebar .nav-link:hover {
+            color: white;
+            background: rgba(255,255,255,0.1);
+            transform: translateX(5px);
+        }
+        .sidebar .nav-link.active {
+            color: white;
+            background: rgba(255,255,255,0.2);
+        }
+        .main-content {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        .status-badge {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .navbar-brand {
+            font-weight: bold;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="container-fluid p-0">
+        <div class="row g-0">
+            <!-- Sidebar -->
+            <div class="col-md-2 sidebar">
+                <div class="p-3">
+                    <h4 class="text-white mb-4">
+                        <i class="fas fa-robot me-2"></i>
+                        AI Orchestrator
+                    </h4>
+                    
+                    <nav class="nav flex-column">
+                        <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="/">
+                            <i class="fas fa-tachometer-alt me-2"></i>
+                            Dashboard
+                        </a>
+                        <a class="nav-link {% if request.url.path == '/projects' %}active{% endif %}" href="/projects">
+                            <i class="fas fa-project-diagram me-2"></i>
+                            Projects
+                        </a>
+                        <a class="nav-link {% if request.url.path == '/monitoring' %}active{% endif %}" href="/monitoring">
+                            <i class="fas fa-chart-line me-2"></i>
+                            Monitoring
+                        </a>
+                        <a class="nav-link {% if request.url.path == '/settings' %}active{% endif %}" href="/settings">
+                            <i class="fas fa-cog me-2"></i>
+                            Settings
+                        </a>
+                        <hr class="text-light">
+                        <a class="nav-link" href="/api/docs" target="_blank">
+                            <i class="fas fa-book me-2"></i>
+                            API Docs
+                        </a>
+                    </nav>
+                    
+                    <div class="mt-auto pt-4">
+                        <small class="text-light opacity-75">
+                            <i class="fas fa-server me-1"></i>
+                            Environment: {{ environment }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="col-md-10 main-content">
+                <!-- Top Navbar -->
+                <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+                    <div class="container-fluid">
+                        <span class="navbar-brand">{% block page_title %}{% endblock %}</span>
+                        
+                        <div class="navbar-nav ms-auto">
+                            <div class="nav-item">
+                                <div class="d-flex align-items-center">
+                                    <div id="health-indicator" class="badge bg-secondary me-3">
+                                        <i class="fas fa-circle me-1"></i>
+                                        <span>Checking...</span>
+                                    </div>
+                                    <small class="text-muted" id="current-time"></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                
+                <!-- Page Content -->
+                <div class="container-fluid p-4">
+                    {% block content %}{% endblock %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Global JavaScript -->
+    <script>
+        // Update current time
+        function updateTime() {
+            document.getElementById('current-time').textContent = new Date().toLocaleString();
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        // Check system health
+        async function checkHealth() {
+            try {
+                const response = await fetch('/api/health');
+                const health = await response.json();
+                const indicator = document.getElementById('health-indicator');
+                
+                if (health.overall_status === 'healthy') {
+                    indicator.className = 'badge bg-success me-3';
+                    indicator.innerHTML = '<i class="fas fa-circle me-1"></i><span>Healthy</span>';
+                } else if (health.overall_status === 'warning') {
+                    indicator.className = 'badge bg-warning me-3';
+                    indicator.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i><span>Warning</span>';
+                } else {
+                    indicator.className = 'badge bg-danger me-3';
+                    indicator.innerHTML = '<i class="fas fa-times-circle me-1"></i><span>Unhealthy</span>';
+                }
+            } catch (error) {
+                const indicator = document.getElementById('health-indicator');
+                indicator.className = 'badge bg-danger me-3';
+                indicator.innerHTML = '<i class="fas fa-times-circle me-1"></i><span>Error</span>';
+            }
+        }
+        
+        // Check health every 30 seconds
+        setInterval(checkHealth, 30000);
+        checkHealth();
+        
+        // Utility functions
+        function showAlert(message, type = 'info') {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            const container = document.querySelector('.container-fluid');
+            container.insertBefore(alertDiv, container.firstChild);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+        
+        function formatDuration(seconds) {
+            if (seconds < 60) return `${seconds.toFixed(1)}s`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${(seconds % 60).toFixed(0)}s`;
+            return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+        }
+        
+        function getStatusBadge(status) {
+            const badges = {
+                'healthy': 'bg-success',
+                'completed': 'bg-success', 
+                'warning': 'bg-warning',
+                'in_progress': 'bg-primary',
+                'failed': 'bg-danger',
+                'error': 'bg-danger',
+                'pending': 'bg-secondary'
+            };
+            return badges[status] || 'bg-secondary';
+        }
+    </script>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
