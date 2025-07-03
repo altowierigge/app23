@@ -1,0 +1,84 @@
+# Environment and Configuration Files
+.env
+.env.*
+!.env.example
+config.yaml
+config.json
+
+# API Keys and Secrets
+*.key
+*.pem
+secrets/
+keys/
+
+# Logs and Cache
+logs/*.log
+*.log
+dashboard.log
+server.log
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Output and Generated Files
+output/
+test-*/
+ai-generated-*/
+incomplete-project-*/
+generated_projects/
+
+# Backup Files
+backups/
+*.backup
+*.bak
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# AI Orchestrator Specific
+ai_orchestrator.egg-info/
+cache/
+*.cache
