@@ -22,11 +22,17 @@ from tenacity import (
 )
 
 from ..core.config import AIModelConfig, RetryStrategy
+from ..utils.process_monitor import get_process_monitor
 
 
 class AgentRole(str, Enum):
     PROJECT_MANAGER_CONSULTANT = "project_manager_consultant"
     FULLSTACK_DEVELOPER = "fullstack_developer"
+    # New specialized GPT roles
+    GPT_MANAGER = "gpt_manager"
+    GPT_VALIDATOR = "gpt_validator"
+    GPT_GIT_AGENT = "gpt_git_agent"
+    GPT_INTEGRATION_AGENT = "gpt_integration_agent"
     # Legacy roles (for backward compatibility)
     PROJECT_MANAGER = "project_manager"
     BACKEND_EXPERT = "backend_expert"
@@ -43,6 +49,17 @@ class TaskType(str, Enum):
     VOTING = "voting"
     IMPLEMENTATION = "implementation"
     TESTING = "testing"
+    # New micro-phase task types
+    MICRO_PHASE_PLANNING = "micro_phase_planning"
+    MICRO_PHASE_VALIDATION = "micro_phase_validation"
+    MICRO_PHASE_IMPLEMENTATION = "micro_phase_implementation"
+    CODE_VALIDATION = "code_validation"
+    STRUCTURE_VALIDATION = "structure_validation"
+    GIT_OPERATION = "git_operation"
+    BRANCH_MANAGEMENT = "branch_management"
+    PULL_REQUEST_CREATION = "pull_request_creation"
+    INTEGRATION_VALIDATION = "integration_validation"
+    FINAL_ASSEMBLY = "final_assembly"
 
 
 @dataclass
@@ -65,6 +82,36 @@ class AgentTask:
     context: Dict[str, Any]
     requirements: Dict[str, Any]
     session_id: str
+    # New micro-phase fields
+    micro_phase_id: Optional[str] = None
+    phase_dependencies: Optional[List[str]] = None
+
+
+@dataclass
+class MicroPhase:
+    """Micro-phase definition for granular development."""
+    id: str
+    name: str
+    description: str
+    phase_type: str  # "backend", "frontend", "database", "auth", etc.
+    files_to_generate: List[str]
+    dependencies: List[str]
+    priority: int
+    estimated_duration: int  # in minutes
+    acceptance_criteria: List[str]
+    branch_name: str
+    implementation_approach: str = ""
+
+
+@dataclass
+class ValidationResult:
+    """Result of code/structure validation."""
+    is_valid: bool
+    validation_type: str
+    issues_found: List[str]
+    suggestions: List[str]
+    files_checked: List[str]
+    metadata: Dict[str, Any]
 
 
 class RateLimiter:
@@ -170,6 +217,10 @@ class BaseAgent(ABC):
         start_time = time.time()
         self.logger.info(f"Executing task: {task.task_type.value} (Session: {task.session_id})")
         
+        # Get process monitor
+        process_monitor = get_process_monitor()
+        agent_name = self.role.value if hasattr(self.role, 'value') else str(self.role)
+        
         try:
             # Rate limiting
             await self.rate_limiter.acquire()
@@ -177,8 +228,33 @@ class BaseAgent(ABC):
             # Format prompt based on task
             formatted_prompt = self._format_prompt(task)
             
+            # Log agent request
+            process_monitor.log_agent_request(
+                session_id=task.session_id,
+                agent_name=agent_name,
+                prompt=formatted_prompt[:500],  # Truncate for display
+                metadata={
+                    "task_type": task.task_type.value,
+                    "model": self.config.model_name,
+                    "prompt_length": len(formatted_prompt)
+                }
+            )
+            
             # Make resilient API call
             response_content = await self._resilient_api_call(formatted_prompt, task)
+            
+            # Log agent response
+            process_monitor.log_agent_response(
+                session_id=task.session_id,
+                agent_name=agent_name,
+                response=response_content[:500],  # Truncate for display
+                metadata={
+                    "task_type": task.task_type.value,
+                    "model": self.config.model_name,
+                    "response_length": len(response_content),
+                    "execution_time": time.time() - start_time
+                }
+            )
             
             # Create successful response
             response = AgentResponse(
@@ -203,6 +279,19 @@ class BaseAgent(ABC):
             return response
             
         except Exception as e:
+            # Log error to process monitor
+            process_monitor.log_error(
+                session_id=task.session_id,
+                source=agent_name,
+                error=str(e),
+                metadata={
+                    "task_type": task.task_type.value,
+                    "model": self.config.model_name,
+                    "execution_time": time.time() - start_time,
+                    "error_type": type(e).__name__
+                }
+            )
+            
             # Create error response
             self.logger.error(f"Task failed: {task.task_type.value} - {str(e)}")
             

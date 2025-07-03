@@ -71,16 +71,25 @@ class CodeParser:
         if not content:
             return files
         
-        # Parse structured implementation with multiple approaches
-        if "```python" in content or "```py" in content:
-            files.extend(self._extract_python_files(content, "backend/"))
+        # First, try to parse using the Claude agent format (===== filename =====)
+        claude_files = self._parse_claude_format_files(content, "backend/")
+        files.extend(claude_files)
         
-        # Parse structured file descriptions
-        files.extend(self._parse_structured_files(content, "backend/", ["python", "py"]))
+        # Only try other parsing methods if Claude format didn't find files
+        if not claude_files:
+            # Parse structured implementation with multiple approaches
+            if "```python" in content or "```py" in content:
+                files.extend(self._extract_python_files(content, "backend/"))
+            
+            # Parse structured file descriptions
+            files.extend(self._parse_structured_files(content, "backend/", ["python", "py"]))
+            
+            # If no files were parsed, try to create from file structure documentation
+            if not files:
+                files.extend(self._create_files_from_structure(content, "backend/"))
         
-        # If no files were parsed, try to create from file structure documentation
-        if not files:
-            files.extend(self._create_files_from_structure(content, "backend/"))
+        # Remove duplicates based on file path
+        files = self._remove_duplicate_files(files)
         
         # Add configuration files if not already present
         has_requirements = any(f.path.endswith('requirements.txt') for f in files)
@@ -121,25 +130,34 @@ class CodeParser:
         if not content:
             return files
         
-        # Parse different frontend file types with structured parsing
-        if "```javascript" in content or "```js" in content:
-            files.extend(self._extract_javascript_files(content, "frontend/"))
+        # First, try to parse using the Claude agent format (===== filename =====)
+        claude_files = self._parse_claude_format_files(content, "frontend/")
+        files.extend(claude_files)
         
-        if "```typescript" in content or "```ts" in content:
-            files.extend(self._extract_typescript_files(content, "frontend/"))
+        # Only try other parsing methods if Claude format didn't find files
+        if not claude_files:
+            # Parse different frontend file types with structured parsing
+            if "```javascript" in content or "```js" in content:
+                files.extend(self._extract_javascript_files(content, "frontend/"))
+            
+            if "```typescript" in content or "```ts" in content:
+                files.extend(self._extract_typescript_files(content, "frontend/"))
+            
+            if "```jsx" in content or "```tsx" in content:
+                files.extend(self._extract_react_files(content, "frontend/"))
+            
+            if "```css" in content or "```scss" in content:
+                files.extend(self._extract_style_files(content, "frontend/"))
+            
+            # Parse structured file descriptions
+            files.extend(self._parse_structured_files(content, "frontend/", ["js", "jsx", "ts", "tsx", "css", "scss"]))
+            
+            # If no files were parsed, try to create from file structure documentation
+            if not files:
+                files.extend(self._create_frontend_files_from_structure(content, "frontend/"))
         
-        if "```jsx" in content or "```tsx" in content:
-            files.extend(self._extract_react_files(content, "frontend/"))
-        
-        if "```css" in content or "```scss" in content:
-            files.extend(self._extract_style_files(content, "frontend/"))
-        
-        # Parse structured file descriptions
-        files.extend(self._parse_structured_files(content, "frontend/", ["js", "jsx", "ts", "tsx", "css", "scss"]))
-        
-        # If no files were parsed, try to create from file structure documentation
-        if not files:
-            files.extend(self._create_frontend_files_from_structure(content, "frontend/"))
+        # Remove duplicates based on file path
+        files = self._remove_duplicate_files(files)
         
         # Add configuration files if not already present
         has_package_json = any(f.path.endswith('package.json') for f in files)
@@ -180,12 +198,21 @@ class CodeParser:
         if not content:
             return files
         
-        # Parse test files
-        if "```python" in content:
-            files.extend(self._extract_python_files(content, "tests/", file_type="test"))
+        # First, try to parse using the Claude agent format (===== filename =====)
+        claude_files = self._parse_claude_format_files(content, "tests/")
+        files.extend(claude_files)
         
-        if "```javascript" in content or "```js" in content:
-            files.extend(self._extract_javascript_files(content, "tests/", file_type="test"))
+        # Only try other parsing methods if Claude format didn't find files
+        if not claude_files:
+            # Parse test files
+            if "```python" in content:
+                files.extend(self._extract_python_files(content, "tests/", file_type="test"))
+            
+            if "```javascript" in content or "```js" in content:
+                files.extend(self._extract_javascript_files(content, "tests/", file_type="test"))
+        
+        # Remove duplicates based on file path
+        files = self._remove_duplicate_files(files)
         
         return files
     
@@ -504,6 +531,128 @@ class CodeParser:
                 current_content.append(line)
         
         return files
+    
+    def _parse_claude_format_files(self, content: str, base_path: str) -> List[GeneratedFile]:
+        """Parse files in Claude agent format (===== filename =====)."""
+        files = []
+        
+        if not content:
+            return files
+        
+        self.logger.info(f"Parsing Claude format files for base_path: {base_path}")
+        
+        lines = content.split('\n')
+        current_file = None
+        current_content = []
+        in_file_section = False
+        
+        for line in lines:
+            # Look for the Claude format: ===== filename =====
+            if line.strip().startswith('=====') and line.strip().endswith('====='):
+                # Save previous file if exists
+                if current_file and current_content:
+                    generated_file = self._create_generated_file(current_file, current_content, base_path)
+                    files.append(generated_file)
+                    self.logger.info(f"Parsed file: {generated_file.path} ({len(generated_file.content)} chars)")
+                
+                # Extract new filename
+                filename = line.strip()[5:-5].strip()  # Remove ===== from both ends
+                current_file = filename
+                current_content = []
+                in_file_section = True
+                self.logger.debug(f"Found Claude format file marker: {filename}")
+                continue
+            
+            # If we're in a file section, collect content
+            if in_file_section and current_file:
+                # Stop collecting if we hit another ===== or reach end
+                if line.strip().startswith('====='):
+                    # This is the start of a new file section, handle it in next iteration
+                    if current_file and current_content:
+                        generated_file = self._create_generated_file(current_file, current_content, base_path)
+                        files.append(generated_file)
+                        self.logger.info(f"Parsed file: {generated_file.path} ({len(generated_file.content)} chars)")
+                    
+                    # Extract new filename
+                    filename = line.strip()[5:-5].strip()
+                    current_file = filename
+                    current_content = []
+                    self.logger.debug(f"Found Claude format file marker: {filename}")
+                    continue
+                else:
+                    current_content.append(line)
+        
+        # Don't forget the last file
+        if current_file and current_content:
+            generated_file = self._create_generated_file(current_file, current_content, base_path)
+            files.append(generated_file)
+            self.logger.info(f"Parsed file: {generated_file.path} ({len(generated_file.content)} chars)")
+        
+        self.logger.info(f"Total Claude format files parsed: {len(files)}")
+        return files
+    
+    def _create_generated_file(self, filename: str, content_lines: List[str], base_path: str) -> GeneratedFile:
+        """Create a GeneratedFile object from filename and content lines."""
+        # Clean up filename - remove any path prefixes that match base_path
+        clean_filename = filename
+        if clean_filename.startswith(base_path):
+            clean_filename = clean_filename[len(base_path):]
+        if clean_filename.startswith('/'):
+            clean_filename = clean_filename[1:]
+        
+        # Determine file type and language
+        file_type = "code"
+        language = "text"
+        
+        if clean_filename.endswith(('.py',)):
+            language = "python"
+        elif clean_filename.endswith(('.js', '.jsx')):
+            language = "javascript"
+        elif clean_filename.endswith(('.ts', '.tsx')):
+            language = "typescript"
+        elif clean_filename.endswith(('.css', '.scss')):
+            language = "css"
+            file_type = "style"
+        elif clean_filename.endswith(('.json',)):
+            language = "json"
+            file_type = "config"
+        elif clean_filename.endswith(('.yml', '.yaml')):
+            language = "yaml"
+            file_type = "config"
+        elif clean_filename.endswith(('.md',)):
+            language = "markdown"
+            file_type = "documentation"
+        elif clean_filename.endswith(('.html',)):
+            language = "html"
+        elif clean_filename.endswith(('.txt',)):
+            file_type = "config"
+        elif 'Dockerfile' in clean_filename:
+            language = "dockerfile"
+            file_type = "config"
+        
+        # Join content and clean up
+        content = '\n'.join(content_lines).strip()
+        
+        return GeneratedFile(
+            path=f"{base_path}{clean_filename}",
+            content=content,
+            file_type=file_type,
+            language=language
+        )
+    
+    def _remove_duplicate_files(self, files: List[GeneratedFile]) -> List[GeneratedFile]:
+        """Remove duplicate files based on file path."""
+        seen_paths = set()
+        unique_files = []
+        
+        for file in files:
+            if file.path not in seen_paths:
+                seen_paths.add(file.path)
+                unique_files.append(file)
+            else:
+                self.logger.debug(f"Removing duplicate file: {file.path}")
+        
+        return unique_files
     
     def _parse_structured_files(self, content: str, base_path: str, extensions: List[str]) -> List[GeneratedFile]:
         """Parse structured file descriptions from AI agent output."""

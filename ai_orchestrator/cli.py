@@ -5,6 +5,7 @@ Command-line interface for the AI Orchestration System.
 import asyncio
 import click
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -45,11 +46,12 @@ def cli(ctx, config, debug, verbose):
 @click.argument('request', required=True)
 @click.option('--output', '-o', help='Output directory for generated project')
 @click.option('--workflow', '-w', help='Path to workflow YAML file')
+@click.option('--workflow-type', '-t', type=click.Choice(['legacy', 'micro_phase']), default='legacy', help='Workflow type to use')
 @click.option('--no-git', is_flag=True, help='Disable Git initialization')
 @click.option('--no-github', is_flag=True, help='Disable GitHub push')
 @click.option('--wait', is_flag=True, help='Wait for completion and show results')
 @click.pass_context
-def generate(ctx, request, output, workflow, no_git, no_github, wait):
+def generate(ctx, request, output, workflow, workflow_type, no_git, no_github, wait):
     """Generate a project using multi-agent orchestration."""
     
     logger = get_logger("cli.generate")
@@ -57,14 +59,15 @@ def generate(ctx, request, output, workflow, no_git, no_github, wait):
     
     click.echo("🤖 Starting AI Orchestration System...")
     click.echo(f"📝 Request: {request}")
+    click.echo(f"🔧 Workflow Type: {workflow_type}")
     
     async def run_generation():
         try:
             # Initialize orchestrator
             orchestrator = AIOrchestrator()
             
-            # Start workflow
-            session_id = await orchestrator.start_workflow(request)
+            # Start workflow with specified type
+            session_id = await orchestrator.start_workflow_with_type(request, workflow_type)
             click.echo(f"🆔 Session ID: {session_id}")
             
             if wait:
@@ -99,17 +102,27 @@ def status(ctx, session_id):
     async def check_status():
         try:
             orchestrator = AIOrchestrator()
-            status_info = await orchestrator.get_workflow_status(session_id)
+            status_info = await orchestrator.get_unified_workflow_status(session_id)
             
             if 'error' in status_info:
                 click.echo(f"❌ {status_info['error']}")
                 return
             
+            workflow_type = status_info.get('workflow_type', 'unknown')
             click.echo(f"📊 Workflow Status for {session_id}")
+            click.echo(f"Type: {workflow_type}")
             click.echo(f"Phase: {status_info['current_phase']}")
-            click.echo(f"Progress: {status_info['progress']:.1f}%")
-            click.echo(f"Runtime: {status_info['execution_time']:.1f}s")
-            click.echo(f"Errors: {status_info['error_count']}")
+            
+            if workflow_type == 'micro_phase':
+                completed = status_info.get('completed_phases_count', 0)
+                total = status_info.get('total_phases_count', 0)
+                click.echo(f"Progress: {completed}/{total} micro-phases completed")
+                if 'repository_url' in status_info and status_info['repository_url']:
+                    click.echo(f"Repository: {status_info['repository_url']}")
+            else:
+                click.echo(f"Progress: {status_info.get('progress', 0):.1f}%")
+                click.echo(f"Runtime: {status_info.get('execution_time', 0):.1f}s")
+                click.echo(f"Errors: {status_info.get('error_count', 0)}")
             
         except Exception as e:
             click.echo(f"❌ Error checking status: {str(e)}", err=True)
@@ -167,11 +180,8 @@ def doctor(ctx, check_apis, check_git, check_github):
         else:
             click.echo("✅ Anthropic API key configured")
         
-        if not config.google.api_key:
-            issues.append("Missing Google API key")
-            click.echo("❌ Google API key not configured")
-        else:
-            click.echo("✅ Google API key configured")
+        # Google API deprecated in v2.0
+        click.echo("ℹ️ Google API deprecated in v2.0 - using OpenAI and Anthropic only")
         
         # API Connectivity
         if check_apis:
@@ -350,6 +360,207 @@ async def generate_output(workflow_state, output_dir, no_git, no_github):
     except Exception as e:
         click.echo(f"❌ Output generation failed: {str(e)}")
         raise
+
+
+# Cache management commands
+@cli.command()
+@click.argument('session_id', required=True)
+@click.pass_context
+def cost_analysis(ctx, session_id):
+    """Get detailed cost analysis for a workflow session."""
+    
+    async def get_analysis():
+        try:
+            orchestrator = AIOrchestrator()
+            
+            # Check if micro-phase coordinator is available
+            if hasattr(orchestrator, 'micro_phase_coordinator'):
+                analysis = await orchestrator.micro_phase_coordinator.get_cost_analysis(session_id)
+                
+                if 'error' in analysis:
+                    click.echo(f"❌ {analysis['error']}")
+                    return
+                
+                cost_report = analysis['cost_analysis']
+                summary = cost_report['summary']
+                
+                click.echo(f"💰 Cost Analysis for Session: {session_id}")
+                click.echo(f"📈 Cache Effectiveness: {analysis['cache_effectiveness']}")
+                click.echo(f"💵 Estimated Monthly Cost: ${analysis['estimated_monthly_cost']:.2f}")
+                click.echo(f"💡 Top Recommendation: {analysis['top_recommendation']}")
+                
+                # Show detailed recommendations
+                recommendations = cost_report.get('optimization_recommendations', [])
+                if recommendations:
+                    click.echo("\n🎯 Optimization Recommendations:")
+                    for i, rec in enumerate(recommendations[:3], 1):
+                        click.echo(f"   {i}. {rec['description']}")
+                        click.echo(f"      Potential Savings: ${rec['potential_savings_usd']:.2f}")
+                        click.echo(f"      Effort: {rec['implementation_effort']} | Risk: {rec['risk_level']}\n")
+            else:
+                click.echo("❌ Cost analysis only available for micro-phase workflows")
+                
+        except Exception as e:
+            click.echo(f"❌ Error getting cost analysis: {str(e)}", err=True)
+    
+    asyncio.run(get_analysis())
+
+
+@cli.command()
+@click.argument('cache_key', required=True)
+@click.option('--confirm', is_flag=True, help='Confirm cache invalidation')
+@click.pass_context
+def invalidate_cache(ctx, cache_key, confirm):
+    """Invalidate specific cache entries."""
+    
+    if not confirm:
+        click.echo("⚠️  Cache invalidation requires --confirm flag")
+        click.echo(f"   This will remove cached data for: {cache_key}")
+        click.echo("   Add --confirm to proceed")
+        return
+    
+    async def invalidate():
+        try:
+            orchestrator = AIOrchestrator()
+            
+            if hasattr(orchestrator, 'micro_phase_coordinator'):
+                result = await orchestrator.micro_phase_coordinator.invalidate_cache(cache_key)
+                
+                click.echo(f"✅ {result['message']}")
+                if result['invalidated_keys']:
+                    click.echo("   Invalidated keys:")
+                    for key in result['invalidated_keys']:
+                        click.echo(f"   - {key}")
+            else:
+                click.echo("❌ Cache invalidation only available for micro-phase workflows")
+                
+        except Exception as e:
+            click.echo(f"❌ Error invalidating cache: {str(e)}", err=True)
+    
+    asyncio.run(invalidate())
+
+
+@cli.command()
+@click.option('--days', default=7, help='Number of days to analyze (default: 7)')
+@click.pass_context
+def cache_stats(ctx, days):
+    """Show comprehensive cache statistics and performance metrics."""
+    
+    async def show_stats():
+        try:
+            click.echo(f"📊 Cache Statistics (Last {days} days)")
+            click.echo("\n💾 Cache Performance:")
+            click.echo("   Total Entries: N/A (Implementation requires active session)")
+            click.echo("   Hit Rate: N/A")
+            click.echo("   Total Size: N/A")
+            click.echo("   Cost Savings: N/A")
+            click.echo("\n⚠️  Full cache statistics require active workflow session")
+            click.echo("   Use 'status --include-cache <session_id>' for active sessions")
+            click.echo("   Use 'cost-analysis <session_id>' for detailed cost information")
+                
+        except Exception as e:
+            click.echo(f"❌ Error getting cache statistics: {str(e)}", err=True)
+    
+    asyncio.run(show_stats())
+
+
+# Cache management group
+@cli.group()
+def cache():
+    """Cache management commands."""
+    pass
+
+
+@cache.command('clear')
+@click.option('--confirm', is_flag=True, help='Confirm cache clearing')
+def clear_cache(confirm):
+    """Clear all cached data."""
+    if not confirm:
+        click.echo("⚠️  This will remove ALL cached data")
+        click.echo("   Add --confirm to proceed")
+        return
+    
+    try:
+        import shutil
+        cache_path = "/tmp/ai_orchestrator_cache"
+        if os.path.exists(cache_path):
+            shutil.rmtree(cache_path)
+            click.echo("🗑️  Cache cleared successfully")
+        else:
+            click.echo("ℹ️  No cache directory found")
+    except Exception as e:
+        click.echo(f"❌ Error clearing cache: {str(e)}")
+
+
+@cache.command('info')
+def cache_info():
+    """Show cache configuration and location."""
+    click.echo("📁 Cache Configuration:")
+    click.echo("   Location: /tmp/ai_orchestrator_cache")
+    click.echo("   Max Size: 10 GB")
+    click.echo("   Default Expiry: 72 hours") 
+    click.echo("   Compression: Enabled")
+    click.echo("   Analytics: Enabled")
+    
+    # Check if cache exists
+    cache_path = "/tmp/ai_orchestrator_cache"
+    if os.path.exists(cache_path):
+        try:
+            import shutil
+            size = shutil.disk_usage(cache_path).used
+            size_mb = size / (1024 * 1024)
+            click.echo(f"   Current Size: {size_mb:.2f} MB")
+        except:
+            click.echo("   Current Size: Unknown")
+    else:
+        click.echo("   Current Size: 0 MB (no cache)")
+
+
+# Update the status command to include cache information
+@cli.command()
+@click.argument('session_id', required=True) 
+@click.option('--include-cache', is_flag=True, help='Include cache statistics in status')
+@click.pass_context
+def status_with_cache(ctx, session_id, include_cache):
+    """Check the status of a workflow session with optional cache stats."""
+    
+    async def check_status():
+        try:
+            orchestrator = AIOrchestrator()
+            status_info = await orchestrator.get_unified_workflow_status(session_id)
+            
+            if 'error' in status_info:
+                click.echo(f"❌ {status_info['error']}")
+                return
+            
+            workflow_type = status_info.get('workflow_type', 'unknown')
+            click.echo(f"📊 Workflow Status for {session_id}")
+            click.echo(f"Type: {workflow_type}")
+            click.echo(f"Phase: {status_info['current_phase']}")
+            
+            if workflow_type == 'micro_phase':
+                completed = status_info.get('completed_phases_count', 0)
+                total = status_info.get('total_phases_count', 0)
+                click.echo(f"Progress: {completed}/{total} micro-phases completed")
+                if 'repository_url' in status_info and status_info['repository_url']:
+                    click.echo(f"Repository: {status_info['repository_url']}")
+                    
+                # Show cache statistics if available and requested
+                if include_cache and 'cache_stats' in status_info:
+                    cache_stats = status_info['cache_stats']
+                    click.echo("\n💾 Cache Performance:")
+                    click.echo(f"   Hit Rate: {cache_stats.get('hit_rate', 'N/A')}")
+                    click.echo(f"   Cost Savings: {cache_stats.get('cost_savings_usd', 'N/A')}")
+                    click.echo(f"   API Calls Saved: {cache_stats.get('api_calls_saved', 'N/A')}")
+            else:
+                click.echo(f"Progress: {status_info.get('progress', 0):.1f}%")
+                click.echo(f"Runtime: {status_info.get('execution_time', 0):.1f}s")
+                click.echo(f"Errors: {status_info.get('error_count', 0)}")
+            
+        except Exception as e:
+            click.echo(f"❌ Error checking status: {str(e)}", err=True)
+    
+    asyncio.run(check_status())
 
 
 if __name__ == '__main__':

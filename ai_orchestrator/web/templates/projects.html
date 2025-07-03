@@ -97,6 +97,14 @@ async function loadProjects() {
                                     <div class="progress mb-2" style="height: 8px;">
                                         <div class="progress-bar" style="width: ${project.progress}%"></div>
                                     </div>
+                                    <div class="mb-2">
+                                        <a href="/process-monitor/${project.session_id}" class="btn btn-sm btn-outline-primary me-1" target="_blank">
+                                            <i class="fas fa-microscope me-1"></i>Live Monitor
+                                        </a>
+                                        <button class="btn btn-sm btn-outline-info" onclick="openStatusModal('${project.session_id}')">
+                                            <i class="fas fa-info-circle me-1"></i>Details
+                                        </button>
+                                    </div>
                                     <small class="text-muted">
                                         Created: ${new Date(project.created_at * 1000).toLocaleString()}
                                     </small>
@@ -160,6 +168,45 @@ async function createProject() {
     } catch (error) {
         showAlert('Network error: Failed to create project', 'danger');
     }
+}
+
+function getStatusBadge(phase) {
+    const statusMap = {
+        'initialization': 'bg-secondary',
+        'joint_brainstorming': 'bg-info',
+        'architecture_design': 'bg-primary',
+        'micro_phase_planning': 'bg-warning',
+        'iterative_development': 'bg-warning',
+        'completed': 'bg-success',
+        'failed': 'bg-danger'
+    };
+    return statusMap[phase] || 'bg-secondary';
+}
+
+function openStatusModal(sessionId) {
+    // Open process monitor in a new window
+    window.open(`/process-monitor/${sessionId}`, '_blank', 'width=1200,height=800');
+}
+
+function showAlert(message, type) {
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Insert alert at the top of the page
+    const container = document.querySelector('.container-fluid');
+    container.insertAdjacentHTML('afterbegin', alertHtml);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = container.querySelector('.alert');
+        if (alert) {
+            alert.remove();
+        }
+    }, 5000);
 }
 
 // Load projects when page loads

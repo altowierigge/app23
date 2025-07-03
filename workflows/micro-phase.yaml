@@ -1,0 +1,454 @@
+name: "Multi-GPT Micro-Phase Development Workflow"
+version: "2.0.0"
+description: "Specialized workflow with 4 GPT agents + Claude for micro-phase development and GitHub integration"
+
+# Agent definitions for the new architecture
+agents:
+  gpt_manager:
+    role: "gpt_manager"
+    model: "gpt-4"
+    description: "Project orchestrator handling brainstorming, architecture approval, and coordination"
+    capabilities:
+      - "brainstorming"
+      - "plan_comparison" 
+      - "micro_phase_planning"
+      - "micro_phase_validation"
+      - "consultation"
+    
+  gpt_validator:
+    role: "gpt_validator"
+    model: "gpt-4"
+    description: "Quality assurance specialist for code and structure validation"
+    capabilities:
+      - "code_validation"
+      - "structure_validation"
+      - "integration_validation"
+    
+  gpt_git_agent:
+    role: "gpt_git_agent"
+    model: "gpt-4"
+    description: "Repository management specialist for GitHub operations"
+    capabilities:
+      - "git_operation"
+      - "branch_management"
+      - "pull_request_creation"
+    
+  gpt_integration_agent:
+    role: "gpt_integration_agent"
+    model: "gpt-4"
+    description: "Final assembly coordinator for production deployment"
+    capabilities:
+      - "integration_validation"
+      - "final_assembly"
+    
+  claude:
+    role: "fullstack_developer"
+    model: "claude-3-sonnet"
+    description: "Full-stack developer responsible for all code implementation"
+    capabilities:
+      - "brainstorming"
+      - "technical_planning"
+      - "micro_phase_planning"
+      - "micro_phase_implementation"
+      - "implementation"
+
+# Workflow phases configuration
+phases:
+  # Phase 1: Joint Planning
+  - name: "joint_brainstorming"
+    description: "GPT Manager and Claude collaborate on feature ideation"
+    agent: "gpt_manager"
+    task_type: "brainstorming"
+    parallel: false
+    timeout: 300
+    inputs:
+      - name: "project_requirements"
+        source: "user_input"
+    outputs:
+      - name: "gpt_brainstorm"
+        destination: "workflow_state"
+    next_phase: "claude_technical_brainstorming"
+    
+  - name: "claude_technical_brainstorming"
+    description: "Claude provides technical insights on the project"
+    agent: "claude"
+    task_type: "brainstorming"
+    parallel: false
+    timeout: 300
+    inputs:
+      - name: "project_requirements"
+        source: "user_input"
+      - name: "gpt_brainstorm"
+        source: "workflow_state.gpt_brainstorm"
+    outputs:
+      - name: "claude_brainstorm"
+        destination: "workflow_state"
+    next_phase: "strategy_synthesis"
+    
+  - name: "strategy_synthesis"
+    description: "GPT Manager synthesizes both perspectives into unified strategy"
+    agent: "gpt_manager"
+    task_type: "plan_comparison"
+    parallel: false
+    timeout: 240
+    inputs:
+      - name: "project_requirements"
+        source: "user_input"
+      - name: "gpt_brainstorm"
+        source: "workflow_state.gpt_brainstorm"
+      - name: "claude_brainstorm"
+        source: "workflow_state.claude_brainstorm"
+    outputs:
+      - name: "unified_features"
+        destination: "workflow_state"
+    next_phase: "architecture_design"
+
+  # Phase 2: Architecture Design & Review
+  - name: "architecture_design"
+    description: "Claude designs complete system architecture"
+    agent: "claude"
+    task_type: "technical_planning"
+    parallel: false
+    timeout: 600
+    inputs:
+      - name: "project_requirements"
+        source: "user_input"
+      - name: "unified_features"
+        source: "workflow_state.unified_features"
+    outputs:
+      - name: "claude_architecture"
+        destination: "workflow_state"
+    next_phase: "architecture_review"
+    
+  - name: "architecture_review"
+    description: "GPT Manager reviews and approves architecture"
+    agent: "gpt_manager"
+    task_type: "plan_comparison"
+    parallel: false
+    timeout: 360
+    inputs:
+      - name: "project_requirements"
+        source: "user_input"
+      - name: "unified_features"
+        source: "workflow_state.unified_features"
+      - name: "claude_architecture"
+        source: "workflow_state.claude_architecture"
+    outputs:
+      - name: "architecture_feedback"
+        destination: "workflow_state"
+      - name: "approved_architecture"
+        destination: "workflow_state"
+    next_phase: "micro_phase_breakdown"
+
+  # Phase 3: Micro-Phase Planning
+  - name: "micro_phase_breakdown"
+    description: "Claude breaks project into micro-phases"
+    agent: "claude"
+    task_type: "micro_phase_planning"
+    parallel: false
+    timeout: 480
+    inputs:
+      - name: "project_requirements"
+        source: "user_input"
+      - name: "approved_architecture"
+        source: "workflow_state.approved_architecture"
+      - name: "unified_features"
+        source: "workflow_state.unified_features"
+    outputs:
+      - name: "proposed_micro_phases"
+        destination: "workflow_state"
+    next_phase: "micro_phase_validation"
+    
+  - name: "micro_phase_validation"
+    description: "GPT Manager validates micro-phase breakdown"
+    agent: "gpt_manager"
+    task_type: "micro_phase_validation"
+    parallel: false
+    timeout: 300
+    inputs:
+      - name: "project_requirements"
+        source: "user_input"
+      - name: "approved_architecture"
+        source: "workflow_state.approved_architecture"
+      - name: "proposed_micro_phases"
+        source: "workflow_state.proposed_micro_phases"
+    outputs:
+      - name: "phase_validation_result"
+        destination: "workflow_state"
+      - name: "approved_micro_phases"
+        destination: "workflow_state"
+    next_phase: "iterative_development"
+
+  # Phase 4: Iterative Development (Dynamic Phases)
+  - name: "iterative_development"
+    description: "Execute each micro-phase iteratively"
+    phase_type: "dynamic_loop"
+    loop_source: "workflow_state.approved_micro_phases"
+    loop_phases:
+      - name: "micro_phase_implementation"
+        description: "Claude implements current micro-phase"
+        agent: "claude"
+        task_type: "micro_phase_implementation"
+        parallel: false
+        timeout: 900
+        inputs:
+          - name: "project_requirements"
+            source: "user_input"
+          - name: "current_micro_phase"
+            source: "loop_item"
+          - name: "previous_phases"
+            source: "workflow_state.completed_phases"
+          - name: "project_architecture"
+            source: "workflow_state.approved_architecture"
+        outputs:
+          - name: "implementation_result"
+            destination: "workflow_state.phase_results[{micro_phase_id}]"
+        next_phase: "code_validation"
+        
+      - name: "code_validation"
+        description: "GPT Validator validates implementation quality"
+        agent: "gpt_validator"
+        task_type: "code_validation"
+        parallel: false
+        timeout: 300
+        inputs:
+          - name: "generated_files"
+            source: "workflow_state.phase_results[{micro_phase_id}].implementation_result"
+          - name: "micro_phase"
+            source: "loop_item"
+          - name: "acceptance_criteria"
+            source: "loop_item.acceptance_criteria"
+        outputs:
+          - name: "validation_result"
+            destination: "workflow_state.phase_results[{micro_phase_id}]"
+        next_phase: "git_operations"
+        
+      - name: "structure_validation"
+        description: "GPT Validator validates file structure"
+        agent: "gpt_validator"
+        task_type: "structure_validation"
+        parallel: true
+        parallel_group: "validation"
+        timeout: 240
+        inputs:
+          - name: "project_structure"
+            source: "workflow_state.phase_results[{micro_phase_id}].implementation_result"
+          - name: "expected_structure"
+            source: "loop_item.files_to_generate"
+          - name: "micro_phase"
+            source: "loop_item"
+        outputs:
+          - name: "structure_validation_result"
+            destination: "workflow_state.phase_results[{micro_phase_id}]"
+        
+      - name: "git_operations"
+        description: "GPT Git Agent handles repository operations"
+        agent: "gpt_git_agent"
+        task_type: "git_operation"
+        parallel: false
+        timeout: 300
+        inputs:
+          - name: "operation_type"
+            value: "micro_phase_commit"
+          - name: "micro_phase"
+            source: "loop_item"
+          - name: "files_to_commit"
+            source: "loop_item.files_to_generate"
+          - name: "repository_info"
+            source: "workflow_state.repository_info"
+        outputs:
+          - name: "git_result"
+            destination: "workflow_state.phase_results[{micro_phase_id}]"
+        next_phase: "pull_request_creation"
+        
+      - name: "pull_request_creation"
+        description: "GPT Git Agent creates pull request"
+        agent: "gpt_git_agent"
+        task_type: "pull_request_creation"
+        parallel: false
+        timeout: 240
+        inputs:
+          - name: "micro_phase"
+            source: "loop_item"
+          - name: "changes_summary"
+            source: "workflow_state.phase_results[{micro_phase_id}].implementation_result"
+          - name: "validation_results"
+            source: "workflow_state.phase_results[{micro_phase_id}].validation_result"
+          - name: "source_branch"
+            source: "loop_item.branch_name"
+          - name: "target_branch"
+            value: "develop"
+        outputs:
+          - name: "pull_request_result"
+            destination: "workflow_state.phase_results[{micro_phase_id}]"
+        
+      - name: "phase_completion_check"
+        description: "GPT Manager validates phase completion"
+        agent: "gpt_manager"
+        task_type: "micro_phase_validation"
+        parallel: false
+        timeout: 180
+        inputs:
+          - name: "current_phase"
+            source: "loop_item"
+          - name: "phase_results"
+            source: "workflow_state.phase_results[{micro_phase_id}]"
+        outputs:
+          - name: "completion_status"
+            destination: "workflow_state.completed_phases"
+        conditional:
+          retry_on_failure: true
+          max_retries: 2
+          failure_action: "consultation"
+    
+    next_phase: "final_integration"
+
+  # Phase 5: Final Integration
+  - name: "integration_validation"
+    description: "GPT Integration Agent validates overall integration"
+    agent: "gpt_integration_agent"
+    task_type: "integration_validation"
+    parallel: false
+    timeout: 480
+    inputs:
+      - name: "completed_phases"
+        source: "workflow_state.completed_phases"
+      - name: "integration_results"
+        source: "workflow_state.phase_results"
+      - name: "test_results"
+        source: "workflow_state.test_results"
+    outputs:
+      - name: "integration_validation_result"
+        destination: "workflow_state"
+    next_phase: "final_assembly"
+    
+  - name: "final_assembly"
+    description: "GPT Integration Agent coordinates final deployment"
+    agent: "gpt_integration_agent"
+    task_type: "final_assembly"
+    parallel: false
+    timeout: 600
+    inputs:
+      - name: "project_metadata"
+        source: "workflow_state.project_metadata"
+      - name: "deployment_target"
+        value: "production"
+      - name: "integration_validation_result"
+        source: "workflow_state.integration_validation_result"
+    outputs:
+      - name: "final_deployment_result"
+        destination: "workflow_state"
+      - name: "repository_url"
+        destination: "workflow_state.final_repository_url"
+
+# Error handling and retry configuration
+error_handling:
+  retry_strategy: "exponential_backoff"
+  max_retries: 3
+  retry_delay: 5
+  circuit_breaker:
+    failure_threshold: 5
+    timeout: 30
+    
+  escalation_rules:
+    - condition: "validation_failed"
+      action: "gpt_manager_consultation"
+      agent: "gpt_manager"
+      task_type: "consultation"
+    
+    - condition: "git_operation_failed"
+      action: "git_agent_retry"
+      agent: "gpt_git_agent"
+      task_type: "git_operation"
+    
+    - condition: "integration_failed"
+      action: "integration_agent_analysis"
+      agent: "gpt_integration_agent"
+      task_type: "integration_validation"
+
+# Quality gates and validation rules
+quality_gates:
+  code_quality:
+    enabled: true
+    validator_agent: "gpt_validator"
+    criteria:
+      - "no_syntax_errors"
+      - "proper_imports"
+      - "error_handling_present"
+      - "security_validated"
+    
+  structure_compliance:
+    enabled: true
+    validator_agent: "gpt_validator"
+    criteria:
+      - "all_required_files_present"
+      - "proper_directory_structure"
+      - "naming_conventions_followed"
+    
+  integration_readiness:
+    enabled: true
+    validator_agent: "gpt_validator"
+    criteria:
+      - "api_contracts_match"
+      - "dependencies_resolved"
+      - "data_flow_validated"
+
+# GitHub integration configuration
+github_integration:
+  enabled: true
+  repository_creation: "automatic"
+  branch_strategy: "feature_branch_per_micro_phase"
+  default_branch: "main"
+  development_branch: "develop"
+  
+  branch_protection:
+    enabled: true
+    require_reviews: true
+    require_ci_checks: true
+    restrict_pushes: true
+  
+  pull_request_template:
+    title_format: "Micro-phase: {phase_name}"
+    auto_assign_reviewers: true
+    auto_add_labels: true
+    require_description: true
+  
+  ci_cd_integration:
+    enabled: true
+    run_tests_on_pr: true
+    auto_merge_on_success: false
+    deployment_on_main: true
+
+# Workflow configuration
+workflow_config:
+  enable_parallel_execution: true
+  enable_caching: true
+  enable_metrics_collection: true
+  enable_real_time_monitoring: true
+  
+  micro_phase_settings:
+    max_parallel_phases: 3
+    max_phase_duration: 1800  # 30 minutes
+    auto_retry_on_failure: true
+    require_validation_before_git: true
+  
+  coordination_settings:
+    agent_communication_timeout: 30
+    workflow_state_sync_interval: 10
+    progress_reporting_interval: 60
+
+# Output configuration
+output:
+  structure: "github_repository"
+  repository_name_template: "ai-generated-{timestamp}"
+  include_documentation: true
+  include_tests: true
+  include_deployment_configs: true
+  
+  deliverables:
+    - "complete_application_code"
+    - "github_repository_with_history"
+    - "pull_request_documentation"
+    - "deployment_ready_build"
+    - "integration_test_results"
+    - "quality_validation_reports"

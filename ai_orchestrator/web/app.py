@@ -2,7 +2,7 @@
 FastAPI web application for AI Orchestration System dashboard.
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -17,6 +17,8 @@ from ..utils.logging_config import setup_logging, get_logger, get_metrics_collec
 from ..utils.validation import SystemHealthChecker, APIKeyValidator
 from ..utils.file_manager import FileOutputManager
 from ..utils.env_manager import update_api_keys, validate_api_key
+from ..utils.process_monitor import get_process_monitor, MessageType
+# from ..core.code_generator import get_code_generator  # Temporarily disabled
 
 
 # Pydantic models for API requests/responses
@@ -139,6 +141,23 @@ def create_app() -> FastAPI:
             "title": "System Monitoring"
         })
     
+    @app.get("/process-monitor/{session_id}", response_class=HTMLResponse)
+    async def process_monitor_page(request: Request, session_id: str):
+        """Real-time process monitoring page for a specific session."""
+        return templates.TemplateResponse("process_monitor.html", {
+            "request": request,
+            "title": f"Process Monitor - {session_id}",
+            "session_id": session_id
+        })
+    
+    @app.get("/universal-generator", response_class=HTMLResponse)
+    async def adaptive_generator_page(request: Request):
+        """Adaptive Project Generator page."""
+        return templates.TemplateResponse("dashboard.html", {
+            "request": request,
+            "title": "Adaptive Project Generator"
+        })
+    
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request):
         """System settings page."""
@@ -157,8 +176,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=503, detail="Orchestrator not available")
         
         try:
-            # Start workflow
-            session_id = await orchestrator.start_workflow(project.description)
+            # Start workflow using micro-phase system (working version from July 2nd)
+            session_id = await orchestrator.start_micro_phase_workflow(project.description)
             
             logger.info(f"Started new project: {session_id}")
             
@@ -541,9 +560,169 @@ def create_app() -> FastAPI:
             logger.error(f"Error testing GitHub connection: {str(e)}")
             return {"connected": False, "message": "Internal error"}
     
-    # WebSocket endpoint for real-time updates
+    # Process Monitoring API Endpoints
+    @app.get("/api/process-monitor/{session_id}/messages")
+    async def get_process_messages(
+        session_id: str,
+        limit: Optional[int] = None,
+        message_type: Optional[str] = None,
+        source: Optional[str] = None,
+        level: Optional[str] = None
+    ):
+        """Get process messages for a session with optional filtering."""
+        try:
+            monitor = get_process_monitor()
+            
+            # Convert string message_type to enum if provided
+            msg_type_enum = None
+            if message_type:
+                try:
+                    msg_type_enum = MessageType(message_type)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid message_type: {message_type}")
+            
+            messages = monitor.get_messages(
+                session_id=session_id,
+                limit=limit,
+                message_type=msg_type_enum,
+                source=source,
+                level=level
+            )
+            
+            return {"messages": messages}
+            
+        except Exception as e:
+            logger.error(f"Error getting process messages: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/api/process-monitor/{session_id}/stats")
+    async def get_process_stats(session_id: str):
+        """Get process statistics for a session."""
+        try:
+            monitor = get_process_monitor()
+            stats = monitor.get_session_stats(session_id)
+            return {"stats": stats}
+            
+        except Exception as e:
+            logger.error(f"Error getting process stats: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/api/process-monitor/sessions")
+    async def get_monitored_sessions():
+        """Get list of sessions being monitored."""
+        try:
+            monitor = get_process_monitor()
+            sessions = monitor.get_active_sessions()
+            return {"sessions": sessions}
+            
+        except Exception as e:
+            logger.error(f"Error getting monitored sessions: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.delete("/api/process-monitor/{session_id}")
+    async def clear_process_messages(session_id: str):
+        """Clear all messages for a session."""
+        try:
+            monitor = get_process_monitor()
+            monitor.clear_session(session_id)
+            return {"status": "success", "message": "Session messages cleared"}
+            
+        except Exception as e:
+            logger.error(f"Error clearing process messages: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # Universal Project Generator API Endpoints
+    @app.post("/api/universal-generator/analyze")
+    async def analyze_project_idea(request: dict):
+        """Analyze project idea and generate complete specification."""
+        try:
+            user_idea = request.get("idea", "")
+            if not user_idea:
+                raise HTTPException(status_code=400, detail="Project idea is required")
+            
+            # Generate session ID
+            import uuid
+            session_id = str(uuid.uuid4())
+            
+            # Use micro-phase workflow system (working version from July 2nd)
+            session_id = await orchestrator.start_micro_phase_workflow(user_idea)
+            
+            return {
+                "session_id": session_id,
+                "analysis": {"user_request": user_idea, "workflow_type": "micro_phase"},
+                "status": "started"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing project idea: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.post("/api/universal-generator/generate")
+    async def generate_complete_project(request: dict):
+        """Generate complete working project from specification."""
+        try:
+            project_spec = request.get("project_spec")
+            if not project_spec:
+                raise HTTPException(status_code=400, detail="Project specification is required")
+            
+            session_id = request.get("session_id", str(uuid.uuid4()))
+            
+            # Create unique output directory
+            import time
+            timestamp = int(time.time())
+            output_dir = f"./output/ai-generated-{timestamp}"
+            
+            code_generator = get_code_generator()
+            result = await code_generator.generate_complete_project(
+                project_spec=project_spec,
+                session_id=session_id,
+                output_path=output_dir
+            )
+            
+            return {
+                "status": "success",
+                "message": "Complete project generated successfully!",
+                "result": result
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating project: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.post("/api/universal-generator/quick-build")
+    async def quick_build_project(request: dict):
+        """Quick build: Analyze idea and generate complete project in one step."""
+        try:
+            user_idea = request.get("idea", "")
+            if not user_idea:
+                raise HTTPException(status_code=400, detail="Project idea is required")
+            
+            # Generate session ID
+            import uuid, time
+            session_id = str(uuid.uuid4())
+            timestamp = int(time.time())
+            
+            logger.info(f"Starting adaptive project build for: {user_idea[:100]}...")
+            
+            # Use micro-phase workflow system to generate the complete project (working version from July 2nd)
+            session_id = await orchestrator.start_micro_phase_workflow(user_idea)
+            
+            return {
+                "status": "success", 
+                "message": "Micro-phase project workflow started successfully!",
+                "session_id": session_id,
+                "analysis": {"user_request": user_idea, "workflow_type": "micro_phase"},
+                "monitor_url": f"/process-monitor/{session_id}",
+                "info": "Project will be built using the adaptive workflow system. Monitor progress at the provided URL."
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in quick build: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # WebSocket endpoints for real-time updates
     @app.websocket("/ws/projects/{session_id}")
-    async def websocket_project_updates(websocket, session_id: str):
+    async def websocket_project_updates(websocket: WebSocket, session_id: str):
         """WebSocket endpoint for real-time project updates."""
         await websocket.accept()
         
@@ -558,9 +737,77 @@ def create_app() -> FastAPI:
                 
                 await asyncio.sleep(2)  # Update every 2 seconds
                 
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected for session {session_id}")
         except Exception as e:
             logger.error(f"WebSocket error: {str(e)}")
             await websocket.close()
+    
+    @app.websocket("/ws/process-monitor/{session_id}")
+    async def websocket_process_monitor(websocket: WebSocket, session_id: str):
+        """WebSocket endpoint for real-time process monitoring."""
+        await websocket.accept()
+        monitor = get_process_monitor()
+        
+        # Send current messages first
+        try:
+            messages = monitor.get_messages(session_id, limit=50)
+            await websocket.send_json({
+                "type": "initial_messages",
+                "messages": messages
+            })
+        except Exception as e:
+            logger.error(f"Error sending initial messages: {str(e)}")
+        
+        # Subscribe to new messages
+        async def message_callback(message_data):
+            try:
+                await websocket.send_json({
+                    "type": "new_message",
+                    "message": message_data
+                })
+            except Exception as e:
+                logger.error(f"Error sending message via WebSocket: {str(e)}")
+        
+        monitor.subscribe(session_id, message_callback)
+        
+        try:
+            # Keep connection alive and handle client messages
+            while True:
+                try:
+                    data = await websocket.receive_json()
+                    
+                    # Handle client commands
+                    if data.get("command") == "get_stats":
+                        stats = monitor.get_session_stats(session_id)
+                        await websocket.send_json({
+                            "type": "stats_update",
+                            "stats": stats
+                        })
+                    elif data.get("command") == "get_messages":
+                        filters = data.get("filters", {})
+                        messages = monitor.get_messages(
+                            session_id=session_id,
+                            limit=filters.get("limit"),
+                            message_type=MessageType(filters["message_type"]) if filters.get("message_type") else None,
+                            source=filters.get("source"),
+                            level=filters.get("level")
+                        )
+                        await websocket.send_json({
+                            "type": "filtered_messages",
+                            "messages": messages
+                        })
+                        
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    await websocket.send_json({"type": "heartbeat"})
+                
+        except WebSocketDisconnect:
+            logger.info(f"Process monitor WebSocket disconnected for session {session_id}")
+        except Exception as e:
+            logger.error(f"Process monitor WebSocket error: {str(e)}")
+        finally:
+            monitor.unsubscribe(session_id, message_callback)
     
     # Error handlers
     @app.exception_handler(404)

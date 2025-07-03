@@ -28,7 +28,7 @@ class AIModelConfig(BaseSettings):
     model_name: str
     base_url: Optional[str] = None
     max_tokens: int = 4000
-    temperature: float = 0.7
+    temperature: float = 0.2
     timeout: int = 60
     
     # Retry configuration
@@ -53,6 +53,11 @@ class AIModelConfig(BaseSettings):
 class OpenAIConfig(AIModelConfig):
     """OpenAI specific configuration."""
     api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
+    # Assistant IDs for the 4 specialized GPT agents
+    manager_assistant_id: Optional[str] = Field(default=None, env="OPENAI_MANAGER_ASSISTANT_ID")
+    validator_assistant_id: Optional[str] = Field(default=None, env="OPENAI_VALIDATOR_ASSISTANT_ID")
+    git_assistant_id: Optional[str] = Field(default=None, env="OPENAI_GIT_ASSISTANT_ID")
+    integration_assistant_id: Optional[str] = Field(default=None, env="OPENAI_INTEGRATION_ASSISTANT_ID")
     model_name: str = "gpt-4"
     base_url: str = "https://api.openai.com/v1"
     requests_per_minute: int = 500

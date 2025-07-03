@@ -11,6 +11,8 @@ from pathlib import Path
 
 from ..agents import TaskType, AgentTask, AgentRole
 from .config import get_config
+from ..utils.process_monitor import get_process_monitor
+from .adaptive_workflow import AdaptiveWorkflow, DynamicPhase
 
 
 @dataclass
@@ -84,6 +86,10 @@ class WorkflowEngine:
         # Agent mapping (will be set by orchestrator)
         self.agent_map = {}
         
+        # Process monitoring
+        self.process_monitor = get_process_monitor()
+        self.current_session_id = None
+        
         # Condition evaluators
         self.condition_evaluators = {
             'disagreements_exist': self._eval_disagreements_exist,
@@ -146,16 +152,18 @@ class WorkflowEngine:
             self.logger.error(f"Failed to load workflow definition: {str(e)}")
             raise
     
-    async def execute_workflow(self, initial_state: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_workflow(self, initial_state: Dict[str, Any], session_id: str = None) -> Dict[str, Any]:
         """
         Execute the complete workflow based on YAML definition.
         
         Args:
             initial_state: Initial workflow state (user_request, etc.)
+            session_id: Session ID for process monitoring
             
         Returns:
             Final workflow state with all results
         """
+        self.current_session_id = session_id
         self.workflow_state = initial_state.copy()
         self.execution_context = {
             'start_time': asyncio.get_event_loop().time(),
@@ -167,6 +175,19 @@ class WorkflowEngine:
         
         self.logger.info(f"Starting workflow execution: {self.workflow_def.name}")
         
+        # Log workflow start
+        if self.current_session_id:
+            self.process_monitor.log_workflow_event(
+                session_id=self.current_session_id,
+                event="workflow_started",
+                details={
+                    "workflow_name": self.workflow_def.name,
+                    "workflow_version": self.workflow_def.version,
+                    "description": self.workflow_def.description,
+                    "total_phases": len(self.workflow_def.phases)
+                }
+            )
+        
         try:
             # Execute phases in order, respecting dependencies and parallelism
             await self._execute_phases()
@@ -175,12 +196,373 @@ class WorkflowEngine:
             await self._finalize_workflow()
             
             self.logger.info("Workflow execution completed successfully")
+            
+            # Log workflow completion
+            if self.current_session_id:
+                self.process_monitor.log_workflow_event(
+                    session_id=self.current_session_id,
+                    event="workflow_completed",
+                    details={
+                        "completed_phases": self.execution_context['completed_phases'],
+                        "failed_phases": self.execution_context['failed_phases'],
+                        "execution_time": asyncio.get_event_loop().time() - self.execution_context['start_time']
+                    }
+                )
+            
             return self.workflow_state
             
         except Exception as e:
             self.logger.error(f"Workflow execution failed: {str(e)}")
+            
+            # Log workflow failure
+            if self.current_session_id:
+                self.process_monitor.log_error(
+                    session_id=self.current_session_id,
+                    source="workflow_engine",
+                    error=f"Workflow execution failed: {str(e)}",
+                    metadata={
+                        "failed_phases": self.execution_context['failed_phases'],
+                        "completed_phases": self.execution_context['completed_phases']
+                    }
+                )
+            
             await self._handle_workflow_failure(e)
             raise
+    
+    async def execute_adaptive_workflow(self, workflow: AdaptiveWorkflow, session_id: str = None) -> Dict[str, Any]:
+        """
+        Execute an adaptive workflow with dynamic phases.
+        
+        Args:
+            workflow: AdaptiveWorkflow object with dynamic phases
+            session_id: Session ID for process monitoring
+            
+        Returns:
+            Final workflow state with all results
+        """
+        self.current_session_id = session_id
+        self.workflow_state = {"session_id": session_id, "user_request": workflow.project_analysis.description}
+        self.execution_context = {
+            'start_time': asyncio.get_event_loop().time(),
+            'current_phase': None,
+            'completed_phases': [],
+            'failed_phases': [],
+            'parallel_groups': {}
+        }
+        
+        self.logger.info(f"Starting adaptive workflow execution for {workflow.project_analysis.project_type.value}")
+        
+        # Log workflow start
+        if self.current_session_id:
+            self.process_monitor.log_workflow_event(
+                session_id=self.current_session_id,
+                event="adaptive_workflow_started",
+                details={
+                    "project_type": workflow.project_analysis.project_type.value,
+                    "project_name": workflow.project_analysis.project_name,
+                    "phase_count": len(workflow.phases),
+                    "estimated_duration": workflow.metadata.get("estimated_total_duration", 0)
+                }
+            )
+        
+        try:
+            # Execute dynamic phases
+            await self._execute_dynamic_phases(workflow.phases)
+            
+            # Finalize workflow
+            await self._finalize_adaptive_workflow(workflow)
+            
+            self.logger.info("Adaptive workflow execution completed successfully")
+            
+            # Log workflow completion
+            if self.current_session_id:
+                self.process_monitor.log_workflow_event(
+                    session_id=self.current_session_id,
+                    event="adaptive_workflow_completed",
+                    details={
+                        "completed_phases": self.execution_context['completed_phases'],
+                        "failed_phases": self.execution_context['failed_phases'],
+                        "execution_time": asyncio.get_event_loop().time() - self.execution_context['start_time'],
+                        "project_type": workflow.project_analysis.project_type.value
+                    }
+                )
+            
+            return self.workflow_state
+            
+        except Exception as e:
+            self.logger.error(f"Adaptive workflow execution failed: {str(e)}")
+            
+            # Log workflow failure
+            if self.current_session_id:
+                self.process_monitor.log_error(
+                    session_id=self.current_session_id,
+                    source="adaptive_workflow_engine",
+                    error=f"Adaptive workflow execution failed: {str(e)}",
+                    metadata={
+                        "failed_phases": self.execution_context['failed_phases'],
+                        "completed_phases": self.execution_context['completed_phases'],
+                        "project_type": workflow.project_analysis.project_type.value
+                    }
+                )
+            
+            await self._handle_workflow_failure(e)
+            raise
+    
+    async def _execute_dynamic_phases(self, phases: List[DynamicPhase]):
+        """Execute dynamic phases respecting dependencies and parallelism."""
+        remaining_phases = phases.copy()
+        
+        while remaining_phases:
+            # Find phases that can be executed now
+            ready_phases = self._get_ready_dynamic_phases(remaining_phases)
+            
+            if not ready_phases:
+                # Check for circular dependencies or unmet conditions
+                self._handle_blocked_dynamic_phases(remaining_phases)
+                break
+            
+            # Group phases by parallel groups
+            parallel_groups = self._group_dynamic_parallel_phases(ready_phases)
+            
+            # Execute phase groups
+            for group_name, group_phases in parallel_groups.items():
+                if group_name == 'sequential':
+                    # Execute sequential phases one by one
+                    for phase in group_phases:
+                        await self._execute_single_dynamic_phase(phase)
+                        remaining_phases.remove(phase)
+                else:
+                    # Execute parallel group
+                    await self._execute_dynamic_parallel_group(group_phases)
+                    for phase in group_phases:
+                        remaining_phases.remove(phase)
+    
+    def _get_ready_dynamic_phases(self, remaining_phases: List[DynamicPhase]) -> List[DynamicPhase]:
+        """Get dynamic phases that are ready to execute."""
+        ready_phases = []
+        
+        for phase in remaining_phases:
+            # Check if dependencies are met
+            if not self._dynamic_dependencies_met(phase):
+                continue
+            
+            ready_phases.append(phase)
+        
+        return ready_phases
+    
+    def _dynamic_dependencies_met(self, phase: DynamicPhase) -> bool:
+        """Check if dynamic phase dependencies are satisfied."""
+        depends_on = phase.depends_on or []
+        for dep in depends_on:
+            if dep not in self.execution_context['completed_phases']:
+                return False
+        return True
+    
+    def _group_dynamic_parallel_phases(self, phases: List[DynamicPhase]) -> Dict[str, List[DynamicPhase]]:
+        """Group dynamic phases by parallel execution groups."""
+        groups = {'sequential': []}
+        
+        for phase in phases:
+            if phase.parallel_group:
+                if phase.parallel_group not in groups:
+                    groups[phase.parallel_group] = []
+                groups[phase.parallel_group].append(phase)
+            else:
+                groups['sequential'].append(phase)
+        
+        return groups
+    
+    async def _execute_single_dynamic_phase(self, phase: DynamicPhase):
+        """Execute a single dynamic workflow phase."""
+        self.execution_context['current_phase'] = phase.name
+        self.logger.info(f"Executing dynamic phase: {phase.name}")
+        
+        # Log phase start
+        if self.current_session_id:
+            self.process_monitor.log_phase_start(
+                session_id=self.current_session_id,
+                phase_name=phase.name,
+                metadata={
+                    "description": phase.description,
+                    "agent": phase.agent_type,
+                    "task_type": phase.task_type.value,
+                    "estimated_duration": phase.estimated_duration
+                }
+            )
+        
+        phase_start_time = asyncio.get_event_loop().time()
+        
+        try:
+            # Prepare inputs for dynamic phase
+            inputs = self._prepare_dynamic_phase_inputs(phase)
+            
+            # Create agent task
+            task_context = inputs.get('context', {})
+            task_context['phase_name'] = phase.name
+            
+            task = AgentTask(
+                task_type=phase.task_type,
+                prompt=inputs.get('prompt', ''),
+                context=task_context,
+                requirements=inputs.get('requirements', {}),
+                session_id=self.workflow_state.get('session_id', 'unknown')
+            )
+            
+            # Execute with timeout
+            result = await asyncio.wait_for(
+                self._execute_agent_task(phase.agent_type, task),
+                timeout=phase.estimated_duration
+            )
+            
+            # Process outputs
+            self._process_dynamic_phase_outputs(phase, result)
+            
+            # Validate results
+            if not self._validate_dynamic_phase_result(phase, result):
+                raise Exception(f"Dynamic phase validation failed: {phase.name}")
+            
+            self.execution_context['completed_phases'].append(phase.name)
+            self.phase_results[phase.name] = result
+            
+            phase_duration = asyncio.get_event_loop().time() - phase_start_time
+            self.logger.info(f"Dynamic phase completed successfully: {phase.name}")
+            
+            # Log phase completion
+            if self.current_session_id:
+                self.process_monitor.log_phase_end(
+                    session_id=self.current_session_id,
+                    phase_name=phase.name,
+                    success=True,
+                    metadata={
+                        "duration": phase_duration,
+                        "result_length": len(str(result)) if result else 0,
+                        "agent_used": phase.agent_type
+                    }
+                )
+            
+            await asyncio.sleep(0.2)
+            
+        except Exception as e:
+            phase_duration = asyncio.get_event_loop().time() - phase_start_time
+            self.logger.error(f"Dynamic phase failed: {phase.name} - {str(e)}")
+            self.execution_context['failed_phases'].append(phase.name)
+            
+            # Log phase failure
+            if self.current_session_id:
+                self.process_monitor.log_phase_end(
+                    session_id=self.current_session_id,
+                    phase_name=phase.name,
+                    success=False,
+                    metadata={
+                        "duration": phase_duration,
+                        "error": str(e),
+                        "agent_used": phase.agent_type
+                    }
+                )
+            
+            if phase.required:
+                raise
+    
+    async def _execute_dynamic_parallel_group(self, phases: List[DynamicPhase]):
+        """Execute a group of dynamic phases in parallel."""
+        group_name = phases[0].parallel_group if phases else "unknown"
+        self.logger.info(f"Executing dynamic parallel group: {group_name}")
+        
+        # Create tasks for all phases
+        tasks = []
+        for phase in phases:
+            task = self._execute_single_dynamic_phase(phase)
+            tasks.append(task)
+        
+        # Execute all tasks in parallel
+        try:
+            await asyncio.gather(*tasks)
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            self.logger.error(f"Dynamic parallel group failed: {group_name} - {str(e)}")
+            raise
+    
+    def _prepare_dynamic_phase_inputs(self, phase: DynamicPhase) -> Dict[str, Any]:
+        """Prepare inputs for a dynamic phase."""
+        inputs = {'prompt': '', 'context': {}, 'requirements': {}}
+        
+        # Use phase inputs if specified
+        if phase.inputs:
+            for key, value in phase.inputs.items():
+                if key == 'prompt':
+                    inputs['prompt'] = value
+                else:
+                    inputs['context'][key] = value
+        else:
+            # Use workflow state as default input
+            inputs['prompt'] = self.workflow_state.get('user_request', '')
+            inputs['context'] = {
+                'workflow_state': self.workflow_state,
+                'completed_phases': self.execution_context['completed_phases']
+            }
+        
+        return inputs
+    
+    def _process_dynamic_phase_outputs(self, phase: DynamicPhase, result: Any):
+        """Process dynamic phase outputs and update workflow state."""
+        # Store result content
+        if hasattr(result, 'content'):
+            content = result.content
+        else:
+            content = str(result)
+        
+        # Store outputs based on phase outputs configuration
+        for output_name in phase.outputs:
+            self.workflow_state[output_name] = content
+        
+        # Also store by phase name for reference
+        self.workflow_state[f"{phase.name}_result"] = content
+    
+    def _validate_dynamic_phase_result(self, phase: DynamicPhase, result: Any) -> bool:
+        """Validate dynamic phase result based on validation criteria."""
+        if not phase.validation_criteria:
+            return True
+        
+        content = result.content if hasattr(result, 'content') else str(result)
+        validation = phase.validation_criteria
+        
+        # Check minimum content length
+        if 'min_length' in validation:
+            if len(content) < validation['min_length']:
+                self.logger.warning(f"Dynamic phase {phase.name} - Content too short: {len(content)} < {validation['min_length']}")
+                return False
+        
+        # Check required sections
+        required_sections = validation.get('required_sections', [])
+        if required_sections:
+            for section in required_sections:
+                if section.lower() not in content.lower():
+                    self.logger.warning(f"Dynamic phase {phase.name} - Missing required section: {section}")
+                    return False
+        
+        return True
+    
+    def _handle_blocked_dynamic_phases(self, remaining_phases: List[DynamicPhase]):
+        """Handle dynamic phases that cannot be executed due to unmet dependencies."""
+        self.logger.warning(f"Blocked dynamic phases detected: {[p.name for p in remaining_phases]}")
+        
+        for phase in remaining_phases:
+            depends_on = phase.depends_on or []
+            unmet_deps = [dep for dep in depends_on 
+                         if dep not in self.execution_context['completed_phases']]
+            if unmet_deps:
+                self.logger.warning(f"Dynamic phase {phase.name} waiting for: {unmet_deps}")
+    
+    async def _finalize_adaptive_workflow(self, workflow: AdaptiveWorkflow):
+        """Finalize adaptive workflow execution."""
+        self.workflow_state['execution_summary'] = {
+            'total_time': asyncio.get_event_loop().time() - self.execution_context['start_time'],
+            'completed_phases': self.execution_context['completed_phases'],
+            'failed_phases': self.execution_context['failed_phases'],
+            'phase_count': len(workflow.phases),
+            'project_type': workflow.project_analysis.project_type.value,
+            'project_name': workflow.project_analysis.project_name
+        }
     
     async def _execute_phases(self):
         """Execute all phases respecting dependencies and parallelism."""
@@ -277,6 +659,22 @@ class WorkflowEngine:
         self.execution_context['current_phase'] = phase.name
         self.logger.info(f"Executing phase: {phase.name}")
         
+        # Log phase start
+        if self.current_session_id:
+            self.process_monitor.log_phase_start(
+                session_id=self.current_session_id,
+                phase_name=phase.name,
+                metadata={
+                    "description": phase.description,
+                    "agent": phase.agent,
+                    "task_type": phase.task_type,
+                    "timeout": phase.timeout,
+                    "parallel": phase.parallel
+                }
+            )
+        
+        phase_start_time = asyncio.get_event_loop().time()
+        
         try:
             # Prepare inputs
             inputs = self._prepare_phase_inputs(phase)
@@ -310,14 +708,42 @@ class WorkflowEngine:
             self.execution_context['completed_phases'].append(phase.name)
             self.phase_results[phase.name] = result
             
+            phase_duration = asyncio.get_event_loop().time() - phase_start_time
             self.logger.info(f"Phase completed successfully: {phase.name}")
+            
+            # Log phase completion
+            if self.current_session_id:
+                self.process_monitor.log_phase_end(
+                    session_id=self.current_session_id,
+                    phase_name=phase.name,
+                    success=True,
+                    metadata={
+                        "duration": phase_duration,
+                        "result_length": len(str(result)) if result else 0,
+                        "agent_used": phase.agent
+                    }
+                )
             
             # Reduced delay between phases for faster execution
             await asyncio.sleep(0.2)
             
         except Exception as e:
+            phase_duration = asyncio.get_event_loop().time() - phase_start_time
             self.logger.error(f"Phase failed: {phase.name} - {str(e)}")
             self.execution_context['failed_phases'].append(phase.name)
+            
+            # Log phase failure
+            if self.current_session_id:
+                self.process_monitor.log_phase_end(
+                    session_id=self.current_session_id,
+                    phase_name=phase.name,
+                    success=False,
+                    metadata={
+                        "duration": phase_duration,
+                        "error": str(e),
+                        "agent_used": phase.agent
+                    }
+                )
             
             if phase.required:
                 raise
@@ -499,7 +925,7 @@ class WorkflowEngine:
         if validation.get('integration_test', False):
             if not self._basic_integration_check(content):
                 self.logger.warning(f"Phase {phase.name} - Failed integration check")
-                    return False
+                return False
         
         return True
     

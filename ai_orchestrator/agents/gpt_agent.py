@@ -37,6 +37,9 @@ class GPTAgent(BaseAgent):
         """Make request to OpenAI API."""
         task_type = kwargs.get('task_type')
         
+        # Optimize temperature based on task type for better response quality
+        task_temperature = self._get_task_temperature(task_type)
+        
         payload = {
             "model": self.config.model_name,
             "messages": [
@@ -44,7 +47,7 @@ class GPTAgent(BaseAgent):
                 {"role": "user", "content": prompt}
             ],
             "max_tokens": self.config.max_tokens,
-            "temperature": self.config.temperature
+            "temperature": task_temperature
         }
         
         response = await self.client.post(
@@ -55,6 +58,19 @@ class GPTAgent(BaseAgent):
         
         data = response.json()
         return data["choices"][0]["message"]["content"]
+    
+    def _get_task_temperature(self, task_type: TaskType = None) -> float:
+        """Get optimized temperature based on task type for better response quality."""
+        if task_type == TaskType.CODE_VALIDATION:
+            return 0.1  # Very low for code validation
+        elif task_type in [TaskType.MICRO_PHASE_IMPLEMENTATION, TaskType.TECHNICAL_PLANNING]:
+            return 0.1  # Very low for implementation tasks
+        elif task_type in [TaskType.REQUIREMENTS_REFINEMENT, TaskType.PLAN_COMPARISON]:
+            return 0.2  # Low for structured content
+        elif task_type in [TaskType.BRAINSTORMING, TaskType.MICRO_PHASE_PLANNING]:
+            return 0.3  # Slightly higher for creative planning
+        else:
+            return self.config.temperature  # Use default (now 0.2)
     
     def _get_system_prompt(self, task_type: TaskType = None) -> str:
         """Get system prompt based on task type."""

@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-microscope me-2"></i>Process Monitor</h2>
+                <div class="d-flex gap-2">
+                    <a href="/universal-generator?session={{ session_id }}&return=monitor" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-arrow-left me-1"></i>Return to Generator
+                    </a>
+                    <span class="badge bg-primary" id="sessionBadge">{{ session_id }}</span>
+                    <span class="badge" id="connectionStatus">Connecting...</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="clearMessages()">
+                        <i class="fas fa-trash me-1"></i>Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Panel -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Session Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <h4 class="text-primary mb-1" id="totalMessages">0</h4>
+                                <small class="text-muted">Total Messages</small>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="text-center">
+                                <h4 class="text-success mb-1" id="duration">0s</h4>
+                                <small class="text-muted">Duration</small>
+                            </div>
+                        </div>
+                        <div class="col-md-8" id="messageTypeStats">
+                            <!-- Dynamic stats will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-2">
+                            <label for="messageTypeFilter" class="form-label">Message Type</label>
+                            <select class="form-select form-select-sm" id="messageTypeFilter" onchange="applyFilters()">
+                                <option value="">All Types</option>
+                                <option value="agent_request">Agent Requests</option>
+                                <option value="agent_response">Agent Responses</option>
+                                <option value="phase_start">Phase Start</option>
+                                <option value="phase_end">Phase End</option>
+                                <option value="error">Errors</option>
+                                <option value="warning">Warnings</option>
+                                <option value="workflow_event">Workflow Events</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="sourceFilter" class="form-label">Source</label>
+                            <select class="form-select form-select-sm" id="sourceFilter" onchange="applyFilters()">
+                                <option value="">All Sources</option>
+                                <option value="gpt_manager">GPT Manager</option>
+                                <option value="claude_agent">Claude Agent</option>
+                                <option value="gpt_validator">GPT Validator</option>
+                                <option value="gpt_git">GPT Git</option>
+                                <option value="workflow_engine">Workflow Engine</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="levelFilter" class="form-label">Level</label>
+                            <select class="form-select form-select-sm" id="levelFilter" onchange="applyFilters()">
+                                <option value="">All Levels</option>
+                                <option value="debug">Debug</option>
+                                <option value="info">Info</option>
+                                <option value="warning">Warning</option>
+                                <option value="error">Error</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="searchFilter" class="form-label">Search</label>
+                            <input type="text" class="form-control form-control-sm" id="searchFilter" placeholder="Search content..." onkeyup="applyFilters()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="autoScroll" checked>
+                                <label class="form-check-label" for="autoScroll">Auto-scroll</label>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <button class="btn btn-sm btn-outline-primary w-100" onclick="refreshMessages()">
+                                <i class="fas fa-refresh me-1"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Messages Panel -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-comments me-2"></i>Real-time Messages</h5>
+                    <span class="badge bg-info" id="messageCount">0 messages</span>
+                </div>
+                <div class="card-body p-0">
+                    <div id="messagesContainer" style="height: 600px; overflow-y: auto;">
+                        <div class="text-center p-4 text-muted">
+                            <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                            <div>Connecting to process monitor...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Message Detail Modal -->
+<div class="modal fade" id="messageDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Message Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="messageDetailContent">
+                <!-- Message details will be inserted here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let socket = null;
+let messages = [];
+let filteredMessages = [];
+let sessionId = "{{ session_id }}";
+
+// Initialize WebSocket connection
+function initWebSocket() {
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/process-monitor/${sessionId}`;
+    socket = new WebSocket(wsUrl);
+    
+    socket.onopen = function(event) {
+        updateConnectionStatus('connected');
+        console.log('Process monitor WebSocket connected');
+    };
+    
+    socket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+    };
+    
+    socket.onclose = function(event) {
+        updateConnectionStatus('disconnected');
+        console.log('Process monitor WebSocket disconnected');
+        // Attempt to reconnect after 3 seconds
+        setTimeout(initWebSocket, 3000);
+    };
+    
+    socket.onerror = function(error) {
+        updateConnectionStatus('error');
+        console.error('Process monitor WebSocket error:', error);
+    };
+}
+
+function handleWebSocketMessage(data) {
+    switch(data.type) {
+        case 'initial_messages':
+            messages = data.messages || [];
+            applyFilters();
+            break;
+        case 'new_message':
+            messages.push(data.message);
+            applyFilters();
+            if (document.getElementById('autoScroll').checked) {
+                scrollToBottom();
+            }
+            break;
+        case 'stats_update':
+            updateStatistics(data.stats);
+            break;
+        case 'heartbeat':
+            // Keep connection alive
+            break;
+    }
+}
+
+function updateConnectionStatus(status) {
+    const statusElement = document.getElementById('connectionStatus');
+    switch(status) {
+        case 'connected':
+            statusElement.className = 'badge bg-success';
+            statusElement.textContent = 'Connected';
+            break;
+        case 'disconnected':
+            statusElement.className = 'badge bg-warning';
+            statusElement.textContent = 'Disconnected';
+            break;
+        case 'error':
+            statusElement.className = 'badge bg-danger';
+            statusElement.textContent = 'Error';
+            break;
+    }
+}
+
+function applyFilters() {
+    const messageTypeFilter = document.getElementById('messageTypeFilter').value;
+    const sourceFilter = document.getElementById('sourceFilter').value;
+    const levelFilter = document.getElementById('levelFilter').value;
+    const searchFilter = document.getElementById('searchFilter').value.toLowerCase();
+    
+    filteredMessages = messages.filter(msg => {
+        if (messageTypeFilter && msg.message_type !== messageTypeFilter) return false;
+        if (sourceFilter && msg.source !== sourceFilter) return false;
+        if (levelFilter && msg.level !== levelFilter) return false;
+        if (searchFilter && !JSON.stringify(msg.content).toLowerCase().includes(searchFilter)) return false;
+        return true;
+    });
+    
+    renderMessages();
+    updateMessageCount();
+}
+
+function renderMessages() {
+    const container = document.getElementById('messagesContainer');
+    
+    if (filteredMessages.length === 0) {
+        container.innerHTML = `
+            <div class="text-center p-4 text-muted">
+                <i class="fas fa-inbox fa-2x mb-3"></i>
+                <div>No messages found</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const html = filteredMessages.map(msg => {
+        const timestamp = new Date(msg.timestamp * 1000).toLocaleTimeString();
+        const levelColor = getLevelColor(msg.level);
+        const typeIcon = getTypeIcon(msg.message_type);
+        
+        let contentPreview = '';
+        if (typeof msg.content === 'object') {
+            contentPreview = JSON.stringify(msg.content, null, 2);
+        } else {
+            contentPreview = String(msg.content);
+        }
+        
+        // Truncate long content
+        if (contentPreview.length > 200) {
+            contentPreview = contentPreview.substring(0, 200) + '...';
+        }
+        
+        return `
+            <div class="border-bottom p-3 message-item" onclick="showMessageDetail('${msg.id}')">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="fas ${typeIcon} me-2"></i>
+                            <span class="fw-bold">${msg.source}</span>
+                            <span class="badge bg-${levelColor} ms-2">${msg.level}</span>
+                            <span class="text-muted ms-2">${timestamp}</span>
+                        </div>
+                        <div class="message-content">
+                            <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.9em;">${contentPreview}</pre>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted">${msg.message_type}</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.innerHTML = html;
+}
+
+function getLevelColor(level) {
+    switch(level) {
+        case 'error': return 'danger';
+        case 'warning': return 'warning';
+        case 'info': return 'info';
+        case 'debug': return 'secondary';
+        default: return 'light';
+    }
+}
+
+function getTypeIcon(messageType) {
+    switch(messageType) {
+        case 'agent_request': return 'fa-arrow-up';
+        case 'agent_response': return 'fa-arrow-down';
+        case 'phase_start': return 'fa-play';
+        case 'phase_end': return 'fa-stop';
+        case 'error': return 'fa-exclamation-triangle';
+        case 'warning': return 'fa-exclamation';
+        case 'workflow_event': return 'fa-cog';
+        default: return 'fa-comment';
+    }
+}
+
+function showMessageDetail(messageId) {
+    const message = messages.find(m => m.id === messageId);
+    if (!message) return;
+    
+    const content = `
+        <div class="row">
+            <div class="col-md-6">
+                <strong>ID:</strong> ${message.id}<br>
+                <strong>Timestamp:</strong> ${message.datetime}<br>
+                <strong>Type:</strong> ${message.message_type}<br>
+                <strong>Source:</strong> ${message.source}<br>
+                <strong>Level:</strong> <span class="badge bg-${getLevelColor(message.level)}">${message.level}</span>
+            </div>
+            <div class="col-md-6">
+                <strong>Metadata:</strong>
+                <pre>${JSON.stringify(message.metadata, null, 2)}</pre>
+            </div>
+        </div>
+        <hr>
+        <strong>Content:</strong>
+        <pre class="bg-light p-3">${JSON.stringify(message.content, null, 2)}</pre>
+    `;
+    
+    document.getElementById('messageDetailContent').innerHTML = content;
+    new bootstrap.Modal(document.getElementById('messageDetailModal')).show();
+}
+
+function updateMessageCount() {
+    document.getElementById('messageCount').textContent = `${filteredMessages.length} messages`;
+}
+
+function updateStatistics(stats) {
+    document.getElementById('totalMessages').textContent = stats.total_messages;
+    document.getElementById('duration').textContent = `${Math.round(stats.duration)}s`;
+    
+    // Update message type statistics
+    const statsHtml = Object.entries(stats.by_type).map(([type, count]) => {
+        return `
+            <div class="col">
+                <div class="text-center">
+                    <h6 class="mb-1">${count}</h6>
+                    <small class="text-muted">${type.replace('_', ' ')}</small>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    if (statsHtml) {
+        document.getElementById('messageTypeStats').innerHTML = `<div class="row">${statsHtml}</div>`;
+    }
+}
+
+function scrollToBottom() {
+    const container = document.getElementById('messagesContainer');
+    container.scrollTop = container.scrollHeight;
+}
+
+function refreshMessages() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({command: 'get_stats'}));
+    }
+}
+
+function clearMessages() {
+    if (confirm('Are you sure you want to clear all messages for this session?')) {
+        fetch(`/api/process-monitor/${sessionId}`, {method: 'DELETE'})
+            .then(response => response.json())
+            .then(data => {
+                messages = [];
+                applyFilters();
+                alert('Messages cleared successfully');
+            })
+            .catch(error => {
+                alert('Error clearing messages: ' + error);
+            });
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initWebSocket();
+    
+    // Request stats every 10 seconds
+    setInterval(refreshMessages, 10000);
+});
+
+// CSS for message items
+const style = document.createElement('style');
+style.textContent = `
+    .message-item {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .message-item:hover {
+        background-color: #f8f9fa;
+    }
+    .message-content pre {
+        max-height: 100px;
+        overflow-y: auto;
+    }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}
